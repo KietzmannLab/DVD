@@ -12,23 +12,24 @@ import subprocess
 import wandb
 import argparse
 
-
 ##############################
 ## Hyperparameters
 ##############################
 def get_args():
     """Get command-line arguments."""
     parser = argparse.ArgumentParser(description='Hyperparameters for blurring project')
+
+    parser.add_argument('--blurring_strategy', type=str, default= ['sharp','first_few_epochs_exponentially_decreasing'][1])
+
     parser.add_argument('--show_progress_bar', type=int, default=1)
     parser.add_argument('--batch_size', type=int, default=512)
     parser.add_argument('--batch_size_val_test', type=int, default=256)
     parser.add_argument('--image_size', type=int, default=256)
     parser.add_argument('--n_epochs', type=int, default=150)
-    parser.add_argument('--warm_up_n_epochs', type=int, default=5)
-    parser.add_argument('--blurring_strategy', type=str, default= ['sharp','fisrt_few_epochs_exponentially_decreasing'][1])
     parser.add_argument('--model_name', type=str, default='resnet50')
     parser.add_argument('--learning_rate', type=float, default=1e-3)
     parser.add_argument('--id', type=int, default=0)
+
     return parser.parse_args()
 
 def get_hyp(args):
@@ -39,7 +40,7 @@ def get_hyp(args):
             'name': 'texture2shape_miniecoset',
             'image_size': args.image_size,
             'dataset_path': '/home/student/l/lzejin/datasets/',
-            'augment': {'randomrotation', 'randomflip', 'grayscale', 'normalize'},
+            'augment': {'randomrotation', 'randomflip', 'grayscale'}, # normalise happens in the blurring class for training
             'num_classes': 112,
         },
         'network': {
@@ -69,7 +70,6 @@ def get_hyp(args):
         }
     }
 
-
 ##############################
 ## Loading the dataset loaders
 ##############################
@@ -86,7 +86,7 @@ def get_Dataset_loaders(hyp):
         train_transform = get_transform(hyp['dataset']['augment'], hyp)
         val_test_transform = get_transform(['normalize'], hyp)
 
-        train_dataset = MiniEcoset('train', dataset_path, None) # DO train_transform after blurring
+        train_dataset = MiniEcoset('train', dataset_path, train_transform)
         val_dataset = MiniEcoset('val', dataset_path, val_test_transform)
         test_dataset = MiniEcoset('test', dataset_path, val_test_transform)
 
@@ -141,11 +141,10 @@ class MiniEcoset(torch.utils.data.Dataset):
 
         return imgs, labels
     
-
 ##############################
 ## transforms
 ##############################
-def get_transform(aug_str,hyp=None, transform_mode = "norm_before_blur"):
+def get_transform(aug_str,hyp=None):
     # Returns a transform compose function given the transforms listed in "aug_str"
 
     transform_list = []
@@ -156,17 +155,14 @@ def get_transform(aug_str,hyp=None, transform_mode = "norm_before_blur"):
         transform_list.append(transforms.RandomHorizontalFlip(p=0.5))
     if 'grayscale' in aug_str:
         transform_list.append(transforms.RandomGrayscale(p=0.5))
-
     transform_list.append(transforms.ConvertImageDtype(torch.float))
-    if 'normalize' in aug_str and transform_mode == "norm_before_blur":
+    if 'normalize' in aug_str:
         transform_list.append(transforms.Normalize(mean = hyp['dataset']['train_img_mean_channels']/255., std = hyp['dataset']['train_img_std_channels']/255.))
 
     transform = transforms.Compose(transform_list)
     
     return transform
 
-    
-   
 ##############################
 ## Logging functions
 ##############################
@@ -197,7 +193,7 @@ def setup_logging_directories(net_name):
 
 
 ##################################
-# move optimizer to cuda    
+# move optimizer to cuda    (do we really need this?)
 ##################################
 def move_optimizer_to_device(optim, device):
     """Move optimizer state to a device."""
@@ -290,31 +286,26 @@ def evaluate_model(data_loader, model, criterion, hyp, transform=None):
 ## Blurring strategy 
 ##########################
 
-class CustomBlur(transforms.GaussianBlur):
-    def __init__(self, epoch, blurring_strategy):
+class CustomBlur(transforms.GaussianBlur): # normalise is done here, so we always need to call this transform
+    def __init__(self, epoch, blurring_strategy, hyp):
         super().__init__(kernel_size=5)  # Initialize with a fixed kernel size
         self.blurring_strategy = blurring_strategy
         self.epoch = epoch
+        self.hyp = hyp
 
     def forward(self, img):
         if self.blurring_strategy == "sharp":
-            return img
+            return transforms.Normalize(mean = self.hyp['dataset']['train_img_mean_channels']/255., std = self.hyp['dataset']['train_img_std_channels']/255.)(img)
 
-        if str(self.blurring_strategy) in map(str, range(1, 29, 3)):
-            sigma = int(self.blurring_strategy)
-
-        elif self.blurring_strategy in ["fisrt_few_epochs_exponentially_decreasing", "fisrt_few_epochs_linearly_decreasing"] and self.epoch <= 20:
-            if self.blurring_strategy == "fisrt_few_epochs_exponentially_decreasing":
+        elif self.blurring_strategy in ["first_few_epochs_exponentially_decreasing", "fisrt_few_epochs_linearly_decreasing"] and self.epoch <= 20:
+            if self.blurring_strategy == "first_few_epochs_exponentially_decreasing":
                 sigma = 28 * (0.01 ** ((self.epoch-1) / 19))
             else:
                 sigma = 28 - 1.4 * self.epoch + 0.001
+            kernel_size = int(8*sigma) + (0 if int(8*sigma) % 2 else 1)
+            return transforms.Normalize(mean = self.hyp['dataset']['train_img_mean_channels']/255., std = self.hyp['dataset']['train_img_std_channels']/255.)(transforms.functional.gaussian_blur(img, kernel_size=kernel_size, sigma=sigma))
         else:
-            return img
-
-        kernel_size = int(8*sigma) + (0 if int(8*sigma) % 2 else 1)
-        return transforms.functional.gaussian_blur(img, kernel_size=kernel_size, sigma=sigma)
-
-
+            return transforms.Normalize(mean = self.hyp['dataset']['train_img_mean_channels']/255., std = self.hyp['dataset']['train_img_std_channels']/255.)(img)
 
 ##########################
 ## Loading the checkpoint and initializing or resuming  the logs
@@ -484,10 +475,6 @@ def train_epoch(epoch, net, train_loader, optimizer, criterion, scaler, blur_tra
         
         # Apply transformations(norm after blurring).
         imgs = blur_transform(imgs)
-        imgs = get_transform(hyp['dataset']['augment'],hyp)(imgs)
-        
-        # Zero the parameter gradients.
-        optimizer.zero_grad()
         
         # Compute the forward pass and loss.
         if hyp['optimizer']['device'] == 'cuda':
@@ -557,8 +544,8 @@ if __name__ == '__main__':
     # Start a new wandb run to track this script
     # wandb.init(project="Blurring_projecy", config=hyp)
 
-    # Set the seed for reproducibility
-    torch.manual_seed(1234)
+    # # Set the seed for reproducibility
+    # torch.manual_seed(1234)
 
     # Load the datasets
     train_loader, val_loader, test_loader, hyp = get_Dataset_loaders(hyp)
@@ -575,7 +562,6 @@ if __name__ == '__main__':
     # Train the network
     for epoch in range(start_epoch, hyp['optimizer']['n_epochs']+1):
 
-        if epoch >= hyp['optimizer']['n_epochs']: break
         blur_transform = CustomBlur(epoch=epoch, blurring_strategy=hyp['network']['blurring_strategy'])
         train_loss, train_acc = train_epoch(epoch, net, train_loader, optimizer, criterion, scaler, \
                                     blur_transform)
