@@ -1,0 +1,123 @@
+#!/bin/bash
+#! How much wallclock time will be required?
+#SBATCH --time=47:59:00 # Run time
+#! Name of the job:
+#SBTACH --job-name H100-test
+#! Specify the number of GPUs per node (between 1 and n; must be n if nodes>1).
+#SBATCH --gres=gpu:H100.80gb:1 #TODO whether it takes long for queueing?
+#! How much wmemory will be required?
+#SBATCH --mem 100G #!TODO cannot be too large, the whole cluster only has 2T
+#! How many cpus will be required?
+#SBATCH -c 10 #TODO
+#! Which partition?
+#SBATCH -p klab-gpu
+#! How many whole nodes should be allocated?
+#SBATCH --nodes 1  # Number of reaquested nodes 
+#! Note probably this should not exceed the total number of GPUs in use.
+#SBATCH --ntasks=1
+
+#! error and output file?
+#SBATCH --error=h100_multi_error.o%j
+#SBATCH --output=h100_multi_output.o%j
+#! What types of email messages do you wish to receive?
+#SBATCH --mail-user=lzejin@uni-osnabrueck.de
+##SBATCH --mail-type=BEGIN
+#SBATCH --mail-type=END
+#SBATCH --mail-type=FAIL
+#SBATCH --mail-type=REQUEUE
+##SBATCH --mail-type=ALL
+
+echo "running in shell: " "$SHELL"
+export NCCL_SOCKET_IFNAME=lo
+
+## Please add any modules you want to load here, as an example we have commented out the modules
+## that you may need such as cuda, cudnn, miniconda3, uncomment them if that is your use case 
+## term handler the function is executed once the job gets the TERM signal
+spack load cuda@11.8.0
+spack load cudnn@8.6.0.163-11.8
+eval "$(conda shell.bash hook)"
+conda activate h100
+
+#! summarize original R!8 looks promising, unsupervised not works<3%, supervised hit 50%; blurring not works
+#? check 62, 10vs12, 
+##################
+## Coding Sanity experiment
+##################
+#TODO controls vs zejin and sushrut code
+
+# # Zejin
+# srun python train_blurring_net_x4.py --blurring_strategy first_few_epochs_exponentially_decreasing --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 4011
+# srun python train_blurring_net_x4.py --blurring_strategy sharp --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 4012
+# srun python train_blurring_net_x4.py --blurring_strategy first_few_epochs_exponentially_decreasing --blur_norm_order norm_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 4013
+# srun python train_blurring_net_x4.py --blurring_strategy sharp --blur_norm_order norm_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 4014
+
+# srun python train_blurring_net_x4_old_train_epoch.py --blurring_strategy first_few_epochs_exponentially_decreasing --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 4008
+# srun python train_blurring_net_x4_old_train_epoch.py --blurring_strategy first_few_epochs_exponentially_decreasing --blur_norm_order norm_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 4009
+
+# srun python train_blurring_net_x4_updated_train_epoch.py --blurring_strategy first_few_epochs_exponentially_decreasing --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 4018
+# srun python train_blurring_net_x4_updated_train_epoch.py --blurring_strategy sharp --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 4028
+# srun python train_blurring_net_x4_updated_train_epoch.py --blurring_strategy first_few_epochs_exponentially_decreasing --blur_norm_order norm_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 4019
+# srun python train_blurring_net_x4_updated_train_epoch.py --blurring_strategy sharp --blur_norm_order norm_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 4029
+
+# not pretrained or pretrained
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset ecoset_square256 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 5001
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset ecoset_square256 --pretrained 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 5002
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --uniform_blur 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 5004
+# pretrained no byte sharp
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch.py --blurring_strategy sharp --dataset ecoset_square256 --pretrained 1 --byte_flag no_byte --blur_norm_order blur_first  --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 5005
+#* 1e-4
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset ecoset_square256 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 5041
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset ecoset_square256 --pretrained 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 5042
+#* controls: no blur(not yet), or no byte, or random uniform blur
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch.py --blurring_strategy sharp --dataset ecoset_square256 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 5043
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset ecoset_square256 --byte_flag no_byte --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 5045 #5044
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset ecoset_square256 --uniform_blur 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 5044
+
+#* on-off center
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag on_off_center --on_off_kernel_size 3 --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 6032 # 6031 is imgs+off-center
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag on_off_center --on_off_kernel_size 5 --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 6051
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag on_off_center --on_off_kernel_size 5 --norm_flag 0 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 6052
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag on_off_center --on_off_kernel_size 7 --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 6071
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag on_off_center --on_off_kernel_size 9 --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 6091
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag on_off_center --on_off_kernel_size 11 --norm_flag 0 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 6111
+
+#TODO -enhance_factor --> fix the problem, then enhance, other wise it not that interesting, enhance x8, lead to white 255
+#TODO 20GB GPU with 100 GB memory is totally enough for 1 file training but batch size /2 --> 256, other wise 512
+#* 'use_byte','no_byte','use_value_x2_byte','use_value_x50_byte','use_value_x128_byte''byte_plus_imgs','on_off_center',
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag use_value_x2_byte --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7001
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag byte_plus_imgs --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7002
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag use_value_x32_byte --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7032
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag use_value_x64_byte --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7064
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag use_value_x128_byte --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7128
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag watershed_segmentation_rgb --norm_flag 0 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7333
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag watershed_segmentation_rgb --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7334
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy sharp --dataset texture2shape_miniecoset --byte_flag watershed_segmentation_rgb --norm_flag 0 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7335
+
+# 6 channel byte + imgs
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag byte_plus_imgs --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7002
+# 9 channel byte + byte + imgs
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag byte_byte_plus_imgs --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7003
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag positive_byte --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7501
+srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag negative_byte --norm_flag 1 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7503 # 7502 just blurring_only mode results
+
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag no_norm_x5_byte --norm_flag 0 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7105
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --batch_size 256 --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag DOG --norm_flag 0 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 7201
+
+
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag on_off_center --on_off_kernel_size 3 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 6031
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag on_off_center --on_off_kernel_size 5 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 6051
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch_on_off_center.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset texture2shape_miniecoset --byte_flag on_off_center --on_off_kernel_size 7 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-4 --n_epochs 125 --id 6071
+
+# train on imagenet16
+# srun python train_blurring_net_x4_updated_ecoset_train_epoch.py --blurring_strategy first_few_epochs_exponentially_decreasing --dataset imagenet16 --uniform_blur 0 --blur_norm_order blur_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 5006
+
+srun python train_blurring_net_x4_updated_ecoset_train_epoch.py --blurring_strategy sharp --dataset ecoset_square256 --blur_norm_order norm_first --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 10001 #5002
+
+# srun python train_net_change_blur_and_oder_1401.py --blurring_strategy first_few_epochs_exponentially_decreasing --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 1401
+# srun python train_net_only_change_blur_keep_train_epoch_1402.py --blurring_strategy first_few_epochs_exponentially_decreasing --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 1402
+# srun python train_net_change_blur_and_oder_opt_train1403.py --blurring_strategy first_few_epochs_exponentially_decreasing --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 1403
+
+# based on 1401
+# srun python train_net_change_blur_1202_clean_temp.py --blurring_strategy first_few_epochs_exponentially_decreasing --model_name resnet50 --learning_rate 1e-3 --n_epochs 125 --id 1402
+
+
