@@ -26,7 +26,23 @@ def get_args():
     parser.add_argument('--blurring_strategy', type=str, default= ['sharp','first_few_epochs_exponentially_decreasing'][1])
     parser.add_argument('--blur_norm_order', type=str, default= ['blur_first','norm_first'][0])
     parser.add_argument('--norm_flag', type=int, default= 1)
-    parser.add_argument('--byte_flag', type=str, default= ['use_byte','no_byte', "positive_byte", 'negative_byte'
+    parser.add_argument('--byte_flag', type=str, default= ['use_byte','no_byte',
+                                                            'strong_leaky_relu', 'strong_flatter_leaky_relu', 'strong_flipped_leaky_relu','strong_rising_leaky_relu'
+                                                            'strong_no_int_leaky_relu', 'negative_weak_flatter_leaky_relu', 'positive_weak_flatter_leaky_relu',
+                                                            'adjusted_symmetric_relu','relu', 
+                                                            'int_step', '6_channel_negative_255_step','mixed_byte','u_step'
+                                                            'negative_255_step', 'positive_255_step',
+                                                            'negative_255_square', 'positive_255_square', 'negative_square', 'positive_square',
+                                                            'sigmoid_byte', "sigmoid", "tanh", "tahn_byte", "tahn_int",
+                                                            'flipped_sigmoid_byte', 'flipped_sigmoid', 'flipped_tanh', 'flipped_tanh_byte', "flipped_tanh_int",
+                                                            
+                                                            'positive_square', 'negative_square',
+                                                            'positive_step', 'negative_step',
+                                                            'sigmoid', 'fliped_sigmoid',
+                                                            'tanh', 'fliped_tanh',
+                                                            'triangle', 'neagtive_triangle',
+                                                            'relu', 'leaky_relu',
+                                                            "positive_byte", 'negative_byte',
                                                             'use_value_x2_byte','use_value_x32_byte','use_value_x128_byte',
                                                             'byte_byte_plus_imgs', 'byte_plus_imgs','on_off_center', 'watershed_segmentation_rgb',
                                                             'no_norm_x5_byte','no_norm_x8_byte','DOG',
@@ -105,10 +121,10 @@ def rescale_to_01(tensor):
     return (tensor - min_val) / (max_val - min_val)
 
 
-# def apply_gaussian_difference_batch(images, sigma1=1, sigma2=28, scale_to_0_1=False):
-#     processed_images = []
+# def apply_gaussian_difference_batch(imgs, sigma1=1, sigma2=28, scale_to_0_1=False):
+#     processed_imgs = []
     
-#     for image in images:
+#     for image in imgs:
 #         # Convert each input image to a PIL Image
 #         img_pil = transforms.functional.to_pil_image(image.clone().cpu())
 
@@ -116,7 +132,7 @@ def rescale_to_01(tensor):
 #         gaussian1 = img_pil.filter(ImageFilter.GaussianBlur(radius=sigma1))
 #         gaussian2 = img_pil.filter(ImageFilter.GaussianBlur(radius=sigma2))
 
-#         # Calculate the difference between the two blurred images
+#         # Calculate the difference between the two blurred imgs
 #         result_image = ImageChops.difference(gaussian1, gaussian2)
         
 #         # Convert to a PyTorch tensor
@@ -124,15 +140,15 @@ def rescale_to_01(tensor):
 #         if scale_to_0_1:  
 #             result_image /= 255.0  # Scale to the range [0, 1]
 
-#         processed_images.append(result_image)
+#         processed_imgs.append(result_image)
     
-#     return processed_images
+#     return processed_imgs
 
-def apply_gaussian_difference_batch(images, sigma1=1, sigma2=28, scale_to_0_1=False):
-    device = images.device  # Get the device (CPU or GPU) of the input images
-    processed_images = []
+def apply_gaussian_difference_batch(imgs, sigma1=1, sigma2=28, scale_to_0_1=False):
+    device = imgs.device  # Get the device (CPU or GPU) of the input imgs
+    processed_imgs = []
 
-    for image in images:
+    for image in imgs:
         # Convert the PyTorch tensor to a NumPy array
         img_np = image.cpu().numpy()
         
@@ -143,15 +159,15 @@ def apply_gaussian_difference_batch(images, sigma1=1, sigma2=28, scale_to_0_1=Fa
         gaussian1 = transforms.functional.gaussian_blur(img_tensor, kernel_size=kernel_size1, sigma=sigma1)
         gaussian2 = transforms.functional.gaussian_blur(img_tensor, kernel_size=kernel_size2, sigma=sigma2)
 
-        # Calculate the difference between the two blurred images
+        # Calculate the difference between the two blurred imgs
         result_image = torch.abs(gaussian1 - gaussian2)
         
         if scale_to_0_1:
             result_image /= result_image.max()  # Scale to the range [0, 1]
 
-        processed_images.append(result_image)
+        processed_imgs.append(result_image)
 
-    return processed_images
+    return processed_imgs
 
 
 def create_kernels(size, enhance_factor=1):
@@ -293,20 +309,20 @@ class MiniEcoset(torch.utils.data.Dataset):
         self.transform = transform
 
         with h5py.File(dataset_path, "r") as f:
-            self.images = torch.from_numpy(f[split]['data'][()]).permute((0, 3, 1, 2)) # to match the CHW expectation of pytorch
+            self.imgs = torch.from_numpy(f[split]['data'][()]).permute((0, 3, 1, 2)) # to match the CHW expectation of pytorch
             self.labels = torch.from_numpy(f[split]['labels'][()])
-            # self.images = torch.from_numpy(f[split]['data'][()].astype(np.int8)).permute((0, 3, 1, 2))
+            # self.imgs = torch.from_numpy(f[split]['data'][()].astype(np.int8)).permute((0, 3, 1, 2))
             # self.labels = torch.from_numpy(f[split]['labels'][()].astype(np.int8))
 
     def __len__(self):
         return len(self.labels)
 
     def __getitem__(self, idx): 
-        # accepts ids and returns the images and labels transformed to the Dataloader
+        # accepts ids and returns the imgs and labels transformed to the Dataloader
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        imgs = self.images[idx]
+        imgs = self.imgs[idx]
         labels = self.labels[idx]
 
         if self.transform:
@@ -466,7 +482,7 @@ def get_network_model(hyp):
             model.fc = nn.Linear(2048, num_classes)
         else:
             model = torchvision.models.resnet50(pretrained=False)
-            if hyp['network']['byte_flag'] in ['on_off_center', 'byte_plus_imgs']:
+            if hyp['network']['byte_flag'] in ['on_off_center', 'byte_plus_imgs', 'mixed_byte', '6_channel_negative_255_step']:
                 # Replace the first convolution layer with the modified layer
                 num_channels = 6
                 model.conv1 = torch.nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -520,62 +536,204 @@ def evaluate_model(data_loader, model, criterion, hyp, transform=None):
     device = hyp['optimizer']['device']
     
     with torch.no_grad():
-        for images, labels in data_loader:
+        for imgs, labels in data_loader:
             if hyp["network"]["byte_flag"]=='use_byte':
-                images = images.to(device).byte().half() #! since training also have this, we need to do this here
+                imgs = imgs.to(device).byte().half() #! since training also have this, we need to do this here
             elif hyp["network"]["byte_flag"]=='positive_byte':
                 m = nn.ReLU()
-                images = m(images.to(device)).byte().half()
+                imgs = m(imgs.to(device)).byte().half()
             elif hyp["network"]["byte_flag"]=='negative_byte':
                 m = nn.ReLU()
-                images = -m(-images.to(device)).byte().half()
+                imgs = -m(-imgs.to(device)).byte().half()
+            elif hyp["network"]["byte_flag"]=='mixed_byte':
+                m = nn.ReLU()
+                imgs = torch.cat((m(imgs).byte(), m(-imgs).byte()), dim=1).to(device).half()
+            elif hyp["network"]["byte_flag"]=='u_step':
+                imgs[(imgs <= -1)] = 3
+                imgs[(imgs <= -2)] = 4
+                imgs[(imgs > -1) & (imgs < 1)] = 0
+                imgs[(imgs >= 1)] = 1
+                imgs[(imgs >= 2)] = 2
+                imgs = imgs.to(device).half()
+            #* Promising?
+            elif hyp["network"]["byte_flag"]=='int_step':
+                '''-2-1, 000, 1-2'''
+                imgs = imgs.to(device).int().half()
+            elif hyp["network"]["byte_flag"]=='6_channel_negative_255_step':
+                '''254,255, 000, 1-2 --> equal to byte'''
+                imgs_1, imgs_2 = imgs.clone(), imgs.clone()
+                imgs_1[(imgs_1 <= -1) & (imgs_1 > -2)] = 255
+                imgs_1[(imgs_1 <= -2)] += 254
+                imgs_1[(imgs_1 > -1)] = 0
+                imgs_1 = imgs_1.to(device).int().half()
+
+                imgs_2[(imgs_2 < 1)] = 0
+                imgs_2 = imgs_2.to(device).int().half()
+
+                imgs = torch.cat((imgs_1, imgs_2), dim=1).to(device).half()
+            elif hyp["network"]["byte_flag"]=='negative_255_step':
+                '''254,255, 000, 1-2 --> equal to byte'''
+                imgs[(imgs <= -1) & (imgs > -2)] = 255
+                imgs[(imgs <= -2)] += 254
+                imgs = imgs.to(device).int().half()
+            elif hyp["network"]["byte_flag"]=='positive_255_step':
+                '''-2-1, 000, 254, 255'''
+                imgs[(imgs < 2) & (imgs > 1)] = 254
+                imgs[(imgs >= 2)] += 255
+                imgs = imgs.to(device).int().half()
+
+            elif hyp["network"]["byte_flag"]=='relu':
+                m = nn.ReLU()
+                imgs = m(imgs).to(device).half()
+            elif hyp["network"]["byte_flag"]=='strong_leaky_relu':
+                imgs[(imgs <= -1)] *= -100 
+                imgs[(imgs <= -2)] *= -100 
+                imgs[(imgs >= 1)] *= 1 
+                imgs[(imgs >= 2)] *= 1 
+                imgs[(imgs > -1) & (imgs < 1)] = 0
+                imgs = imgs.to(device).int().half() #! Notice that we done the int() 
+            elif hyp["network"]["byte_flag"]=='strong_flatter_leaky_relu':
+                imgs[(imgs <= -1)] = -100 * (imgs[(imgs <= -1)]+1)
+                imgs[(imgs >= 1)] *= 1
+                imgs[(imgs > -1) & (imgs < 1)] = 0
+                imgs = imgs.to(device).int().half()  #! Notice that we done the int()
+            elif hyp["network"]["byte_flag"]=='strong_flipped_leaky_relu':
+                imgs[(imgs <= -1)] *= -1 
+                imgs[(imgs >= 1)] *= 100
+                imgs[(imgs > -1) & (imgs < 1)] = 0 
+                imgs = imgs.to(device).int().half()   #! Notice that we done the int()
+            elif hyp["network"]["byte_flag"]=='strong_rising_leaky_relu':
+                imgs[(imgs <= -1)] = 100 * (imgs[(imgs <= -1)]+1)
+                imgs[(imgs >= 1)] *= 1
+                imgs[(imgs > -1) & (imgs < 1)] = 0
+                imgs = imgs.to(device).int().half()   #! Notice that we done the int()
+            elif hyp["network"]["byte_flag"]=='strong_no_int_leaky_relu':
+                imgs[(imgs <= -1)] *= -100 
+                imgs[(imgs <= -2)] *= -100 
+                imgs[(imgs >= 1)] *= 1 
+                imgs[(imgs >= 2)] *= 1 
+                imgs[(imgs > -1) & (imgs < 1)] = 0
+                imgs = imgs.to(device).half() #! Notice that we done the int()
+            elif hyp["network"]["byte_flag"]=='negative_weak_flatter_leaky_relu':
+                imgs[(imgs <= -1)] = -0.01 * (imgs[(imgs <= -1)]+1)
+                imgs[(imgs >= 1)] *= 1
+                imgs[(imgs > -1) & (imgs < 1)] = 0
+                imgs = imgs.to(device).half() #* no int()
+            elif hyp["network"]["byte_flag"]=='positive_weak_flatter_leaky_relu':
+                imgs[(imgs <= -1)] = -1 * (imgs[(imgs <= -1)]+1)
+                imgs[(imgs >= 1)] *= 0.01
+                imgs[(imgs > -1) & (imgs < 1)] = 0
+                imgs = imgs.to(device).half()
+
+            elif hyp["network"]["byte_flag"]=='adjusted_symmetric_relu':
+                imgs[(imgs <= -1)] *= 1 
+                imgs[(imgs <= -2)] *= 1 
+                imgs[(imgs >= 1)] *= 1 
+                imgs[(imgs >= 2)] *= 1 
+                imgs[(imgs > -1) & (imgs < 1)] = 0
+                imgs = imgs.to(device).int().half()
+
+            elif hyp["network"]["byte_flag"]=='negative_255_square':
+                '''255-254, 0, 253-252'''
+                imgs[(imgs <= -1)] = 255
+                imgs[(imgs <= -2)] = 254 
+                imgs[(imgs >= 1)] = 252
+                imgs[(imgs >= 2)] = 253
+                imgs = imgs.to(device).int().half()
+            elif hyp["network"]["byte_flag"]=='postive_255_square':
+                '''3-4, 255, 1-2'''
+                imgs[(imgs > -1) & (imgs < 1)] = 255
+                imgs[(imgs <= -1)] = 4
+                imgs[(imgs <= -2)] = 3
+                imgs = imgs.to(device).int().half()
+
+            
+            elif hyp["network"]["byte_flag"]=='negative_square':
+                imgs[(imgs <= -1)] *= -1
+                imgs = imgs.to(device).int().half()
+            elif hyp["network"]["byte_flag"]=='postive_square':
+                imgs[(imgs >= 1)] *= -1
+                imgs = imgs.to(device).int().half()
+
+            elif hyp["network"]["byte_flag"]=='sigmoid_byte':
+                m = nn.Sigmoid()
+                imgs = m(imgs.to(device)).byte().half()
+            elif hyp["network"]["byte_flag"]=='sigmoid':
+                m = nn.Sigmoid()
+                imgs = m(imgs.to(device)).half()
+            elif hyp["network"]["byte_flag"]=='flipped_sigmoid_byte':
+                m = lambda x: 1 - nn.Sigmoid()(x)
+                imgs = m(imgs.to(device)).byte().half()
+            elif hyp["network"]["byte_flag"]=='flipped_sigmoid':
+                m = lambda x: 1 - nn.Sigmoid()(x)
+                imgs = m(imgs.to(device)).half()
+            elif hyp["network"]["byte_flag"]=='tanh_byte':
+                m = nn.Tanh()
+                imgs = m(imgs.to(device)).byte().half()
+            elif hyp["network"]["byte_flag"]=='tanh':
+                m = nn.Tanh()
+                imgs = m(imgs.to(device)).half()
+            elif hyp["network"]["byte_flag"]=='flipped_tanh_byte':
+                m = lambda x: -nn.Tanh()(x)
+                imgs = m(imgs.to(device)).byte().half()
+            elif hyp["network"]["byte_flag"]=='flipped_tanh':
+                m = lambda x: -nn.Tanh()(x)
+                imgs = m(imgs.to(device)).half()
+            elif hyp["network"]["byte_flag"]=='tanh_int':
+                '''-1, 000, 1'''
+                m = nn.Tanh()
+                imgs = m(imgs.to(device)).int().half()
+            elif hyp["network"]["byte_flag"]=='flipped_tanh_int':
+                m = lambda x: -nn.Tanh()(x)
+                imgs = m(imgs.to(device)).int().half()
+
             elif hyp["network"]["byte_flag"]=='use_value_x2_byte':
-                images = (images*2).to(device).byte().half()
+                imgs = (imgs*2).to(device).byte().half()
             elif hyp["network"]["byte_flag"]=='use_value_x32_byte':
-                images = (images*32).to(device).byte().half()
+                imgs = (imgs*32).to(device).byte().half()
             elif hyp["network"]["byte_flag"]=='use_value_x128_byte':
-                images = (images*128).to(device).byte().half()
+                imgs = (imgs*128).to(device).byte().half()
             elif hyp["network"]["byte_flag"]=='watershed_segmentation_rgb':
-                images = [watershed_segmentation_rgb(img) for img in images]
-                # Convert the list of PIL images to a list of PyTorch tensors
-                img_tensors = [transforms.ToTensor()(img) for img in images]
+                imgs = [watershed_segmentation_rgb(img) for img in imgs]
+                # Convert the list of PIL imgs to a list of PyTorch tensors
+                img_tensors = [transforms.ToTensor()(img) for img in imgs]
                 # Stack the tensors to create a batch
-                images = torch.stack(img_tensors, dim=0).to(device).half()
+                imgs = torch.stack(img_tensors, dim=0).to(device).half()
             elif hyp["network"]["byte_flag"]=='no_norm_x5_byte':
-                # convert images into range 0-1
-                images = rescale_to_0_1(images)
-                images = (images.to(device)*5).byte().half()
+                # convert imgs into range 0-1
+                imgs = rescale_to_0_1(imgs)
+                imgs = (imgs.to(device)*5).byte().half()
             elif hyp["network"]["byte_flag"]=='no_norm_x8_byte':
-                # convert images into range 0-1
-                images = rescale_to_0_1(images)
-                images = (images.to(device)*8).byte().half()
+                # convert imgs into range 0-1
+                imgs = rescale_to_0_1(imgs)
+                imgs = (imgs.to(device)*8).byte().half()
             elif hyp["network"]["byte_flag"]=='DOG':
-                # convert images into range 0-1
-                images = apply_gaussian_difference_batch(images, sigma1=1, sigma2=28, scale_to_0_1=True)
-                images = torch.stack(images, dim=0).to(device).half()
+                # convert imgs into range 0-1
+                imgs = apply_gaussian_difference_batch(imgs, sigma1=1, sigma2=28, scale_to_0_1=True)
+                imgs = torch.stack(imgs, dim=0).to(device).half()
             elif hyp["network"]["byte_flag"]=='byte_plus_imgs':
-                images = torch.cat((images.to(device).byte().half(), images.to(device).clone()), dim=1)
+                imgs = torch.cat((imgs.to(device).byte().half(), imgs.to(device).clone()), dim=1)
             elif hyp["network"]["byte_flag"]=='byte_byte_plus_imgs':
-                images = torch.cat((images.to(device).byte().half(), images.to(device).byte().half(), images.to(device).clone()), dim=1)
+                imgs = torch.cat((imgs.to(device).byte().half(), imgs.to(device).byte().half(), imgs.to(device).clone()), dim=1)
             elif hyp["network"]["byte_flag"]=='on_off_center':
-                preprocessed_img_on_center = F.conv2d(images.to(device).clone(), on_center_kernel, padding=on_off_kernel_size // 2, groups=3)
-                preprocessed_img_off_center = F.conv2d(images.to(device).clone(), off_center_kernel, padding=on_off_kernel_size // 2, groups=3)
-                images = torch.cat((preprocessed_img_on_center, preprocessed_img_off_center), dim=1).to(device).half()         
+                preprocessed_img_on_center = F.conv2d(imgs.to(device).clone(), on_center_kernel, padding=on_off_kernel_size // 2, groups=3)
+                preprocessed_img_off_center = F.conv2d(imgs.to(device).clone(), off_center_kernel, padding=on_off_kernel_size // 2, groups=3)
+                imgs = torch.cat((preprocessed_img_on_center, preprocessed_img_off_center), dim=1).to(device).half()         
             elif hyp["network"]["byte_flag"]=='no_byte':
-                images = images.to(device).half() 
+                imgs = imgs.to(device).half() 
             else:
                 raise ValueError(f"Unknown byte_flag: {hyp['network']['byte_flag']}")
 
             labels = labels.to(device).long()
             if transform:
-                images = transform(images)
+                imgs = transform(imgs)
             
             if device == 'cuda':
                 with torch.cuda.amp.autocast():
-                    outputs = model(images)
+                    outputs = model(imgs)
                     loss = criterion(outputs, labels)
             else:
-                outputs = model(images)
+                outputs = model(imgs)
                 loss = criterion(outputs, labels)
             
             total_loss += loss.item()
@@ -793,7 +951,7 @@ def train_epoch(epoch, net, train_loader, optimizer, criterion, scaler, blur_tra
     batch_id =0 
     for imgs, lbls in train_loader:
         batch_id+=1
-        # Move images and labels to the desired device.
+        # Move imgs and labels to the desired device.
         imgs, lbls = imgs.to(device), lbls.to(device)
         
         # Apply transformations(norm after blurring).
@@ -815,6 +973,146 @@ def train_epoch(epoch, net, train_loader, optimizer, criterion, scaler, blur_tra
         elif hyp["network"]["byte_flag"]=='negative_byte':
             m = nn.ReLU()
             imgs = -m(-imgs.to(device)).byte().half()
+        elif hyp["network"]["byte_flag"]=='mixed_byte':
+            m = nn.ReLU()
+            imgs = torch.cat((m(imgs).byte(), m(-imgs).byte()), dim=1).to(device).half()
+        elif hyp["network"]["byte_flag"]=='u_step':
+            imgs[(imgs <= -1)] = 3
+            imgs[(imgs <= -2)] = 4
+            imgs[(imgs > -1) & (imgs < 1)] = 0
+            imgs[(imgs >= 1)] = 1
+            imgs[(imgs >= 2)] = 2
+            imgs = imgs.to(device).half()
+
+        #* Promising?
+        elif hyp["network"]["byte_flag"]=='int_step':
+            '''-2-1, 000, 1-2'''
+            imgs = imgs.to(device).int().half()
+        elif hyp["network"]["byte_flag"]=='6_channel_negative_255_step':
+            '''254,255, 000, 1-2 --> equal to byte'''
+            imgs_1, imgs_2 = imgs.clone(), imgs.clone()
+            imgs_1[(imgs_1 <= -1) & (imgs_1 > -2)] = 255
+            imgs_1[(imgs_1 <= -2)] += 254
+            imgs_1[(imgs_1 > -1)] = 0
+            imgs_1 = imgs_1.to(device).int().half()
+            
+            imgs_2[(imgs_2 < 1)] = 0
+            imgs_2 = imgs_2.to(device).int().half()
+
+            imgs = torch.cat((imgs_1, imgs_2), dim=1).to(device).half()
+        elif hyp["network"]["byte_flag"]=='negative_255_step':
+            '''254,255, 000, 1-2 --> equal to byte`?'''
+            # imgs[(imgs <= -1)] += 257 # one difference is that -1 is 256 not 255, #! then only 0.6 get
+            imgs[(imgs <= -1)] = 255
+            imgs[(imgs <= -2)] = 254 
+            imgs = imgs.to(device).int().half()
+        elif hyp["network"]["byte_flag"]=='positive_255_step':
+            '''-2-1, 000, 254, 255'''
+            # imgs[(imgs >= 1)] += 253
+            imgs[(imgs >= 1)] = 254
+            imgs[(imgs >= 2)] = 255
+            imgs = imgs.to(device).int().half()
+
+        elif hyp["network"]["byte_flag"]=='relu':
+            m = nn.ReLU()
+            imgs = m(imgs).to(device).half()
+        elif hyp["network"]["byte_flag"]=='strong_leaky_relu':
+            imgs[(imgs <= -1)] *= -100 
+            imgs[(imgs <= -2)] *= -100 
+            imgs[(imgs >= 1)] *= 1 
+            imgs[(imgs >= 2)] *= 1 
+            imgs[(imgs > -1) & (imgs < 1)] = 0
+            imgs = imgs.to(device).int().half()
+        elif hyp["network"]["byte_flag"]=='strong_flatter_leaky_relu':
+                imgs[(imgs <= -1)] = -100 * (imgs[(imgs <= -1)]+1)
+                imgs[(imgs >= 1)] *= 1
+                imgs[(imgs > -1) & (imgs < 1)] = 0
+                imgs = imgs.to(device).int().half()
+        elif hyp["network"]["byte_flag"]=='strong_flipped_leaky_relu':
+            imgs[(imgs <= -1)] *= -1 
+            imgs[(imgs >= 1)] *= 100
+            imgs[(imgs > -1) & (imgs < 1)] = 0
+            imgs = imgs.to(device).int().half()
+        elif hyp["network"]["byte_flag"]=='strong_rising_leaky_relu':
+            imgs[(imgs <= -1)] = 100 * (imgs[(imgs <= -1)]+1)
+            imgs[(imgs >= 1)] *= 1
+            imgs[(imgs > -1) & (imgs < 1)] = 0
+            imgs = imgs.to(device).int().half()
+        # 'strong_no_int_leaky_relu', 'negative_weak_flatter_leaky_relu', 'positive_weak_flatter_leaky_relu'
+        elif hyp["network"]["byte_flag"]=='strong_no_int_leaky_relu':
+            imgs[(imgs <= -1)] *= -100 
+            imgs[(imgs <= -2)] *= -100 
+            imgs[(imgs >= 1)] *= 1 
+            imgs[(imgs >= 2)] *= 1 
+            imgs[(imgs > -1) & (imgs < 1)] = 0
+            imgs = imgs.to(device).half() #! Notice that we done the int()
+        elif hyp["network"]["byte_flag"]=='negative_weak_flatter_leaky_relu':
+            imgs[(imgs <= -1)] = -0.01 * (imgs[(imgs <= -1)]+1)
+            imgs[(imgs >= 1)] *= 1
+            imgs[(imgs > -1) & (imgs < 1)] = 0
+            imgs = imgs.to(device).half() #* no int()
+        elif hyp["network"]["byte_flag"]=='positive_weak_flatter_leaky_relu':
+            imgs[(imgs <= -1)] = -1 * (imgs[(imgs <= -1)]+1)
+            imgs[(imgs >= 1)] *= 0.01
+            imgs[(imgs > -1) & (imgs < 1)] = 0
+            imgs = imgs.to(device).half()
+
+        elif hyp["network"]["byte_flag"]=='adjusted_symmetric_relu':
+            imgs[(imgs <= -1)] *= 1 
+            imgs[(imgs <= -2)] *= 1 
+            imgs[(imgs >= 1)] *= 1 
+            imgs[(imgs >= 2)] *= 1 
+            imgs[(imgs > -1) & (imgs < 1)] = 0
+            imgs = imgs.to(device).int().half()
+
+        elif hyp["network"]["byte_flag"]=='negative_255_square':
+            imgs[(imgs <= -1)] = 255
+            imgs[(imgs <= -2)] = 254 
+            imgs[(imgs >= 1)] = 253
+            imgs[(imgs >= 2)] = 252
+            imgs = imgs.to(device).int().half()
+        elif hyp["network"]["byte_flag"]=='postive_255_square':
+            imgs[(imgs > -1) & (imgs < 1)] = 255
+            imgs = imgs.to(device).int().half()
+
+        elif hyp["network"]["byte_flag"]=='negative_square':
+            imgs[(imgs <= -1)] *= -1
+            imgs = imgs.to(device).int().half()
+        elif hyp["network"]["byte_flag"]=='postive_square':
+            imgs[(imgs >= 1)] *= -1
+            imgs = imgs.to(device).int().half()
+
+        elif hyp["network"]["byte_flag"]=='sigmoid_byte':
+            m = nn.Sigmoid()
+            imgs = m(imgs.to(device)).byte().half()
+        elif hyp["network"]["byte_flag"]=='sigmoid':
+            m = nn.Sigmoid()
+            imgs = m(imgs.to(device)).half()
+        elif hyp["network"]["byte_flag"]=='flipped_sigmoid_byte':
+            m = lambda x: 1 - nn.Sigmoid()(x)
+            imgs = m(imgs.to(device)).byte().half()
+        elif hyp["network"]["byte_flag"]=='flipped_sigmoid':
+            m = lambda x: 1 - nn.Sigmoid()(x)
+            imgs = m(imgs.to(device)).half()
+        elif hyp["network"]["byte_flag"]=='tanh_byte':
+            m = nn.Tanh()
+            imgs = m(imgs.to(device)).byte().half()
+        elif hyp["network"]["byte_flag"]=='tanh':
+            m = nn.Tanh()
+            imgs = m(imgs.to(device)).half()
+        elif hyp["network"]["byte_flag"]=='flipped_tanh_byte':
+            m = lambda x: -nn.Tanh()(x)
+            imgs = m(imgs.to(device)).byte().half()
+        elif hyp["network"]["byte_flag"]=='flipped_tanh':
+            m = lambda x: -nn.Tanh()(x)
+            imgs = m(imgs.to(device)).half()
+        elif hyp["network"]["byte_flag"]=='tanh_int':
+            '''-1, 000, 1'''
+            m = nn.Tanh()
+            imgs = m(imgs.to(device)).int().half()
+        elif hyp["network"]["byte_flag"]=='flipped_tanh_int':
+            m = lambda x: -nn.Tanh()(x)
+            imgs = m(imgs.to(device)).int().half()
         elif hyp["network"]["byte_flag"]=='use_value_x2_byte':
             imgs = (imgs.to(device)*2).byte().half()
         elif hyp["network"]["byte_flag"]=='use_value_x32_byte':
@@ -823,16 +1121,16 @@ def train_epoch(epoch, net, train_loader, optimizer, criterion, scaler, blur_tra
             imgs = (imgs.to(device)*128).byte().half()
         elif hyp["network"]["byte_flag"]=='watershed_segmentation_rgb':
             imgs = [watershed_segmentation_rgb(img) for img in imgs]
-            # Convert the list of PIL images to a list of PyTorch tensors
+            # Convert the list of PIL imgs to a list of PyTorch tensors
             img_tensors = [transforms.ToTensor()(img) for img in imgs]
             # Stack the tensors to create a batch
             imgs = torch.stack(img_tensors, dim=0).to(device).half()
         elif hyp["network"]["byte_flag"]=='no_norm_x5_byte':
-            # convert images into range 0-1
+            # convert imgs into range 0-1
             imgs = rescale_to_0_1(imgs)
             imgs = (imgs.to(device)*5).byte().half()
         elif hyp["network"]["byte_flag"]=='no_norm_x8_byte':
-            # convert images into range 0-1
+            # convert imgs into range 0-1
             imgs = rescale_to_0_1(imgs)
             imgs = (imgs.to(device)*8).byte().half()
         elif hyp["network"]["byte_flag"]=='DOG':
@@ -845,6 +1143,9 @@ def train_epoch(epoch, net, train_loader, optimizer, criterion, scaler, blur_tra
         elif hyp["network"]["byte_flag"]=='byte_byte_plus_imgs':
             imgs = torch.cat((imgs.to(device).clone().byte().half(), imgs.to(device).clone().byte().half(), imgs.to(device).clone().half()), dim=1).to(device).half()
         elif hyp["network"]["byte_flag"]=='on_off_center':
+            preprocessed_img_on_center = F.conv2d(imgs.to(device).clone(), on_center_kernel, padding=on_off_kernel_size // 2, groups=3)
+            preprocessed_img_off_center = F.conv2d(imgs.to(device).clone(), off_center_kernel, padding=on_off_kernel_size // 2, groups=3)
+            imgs = torch.cat((preprocessed_img_on_center, preprocessed_img_off_center), dim=1).to(device).half()
             # print(f"imgs: {imgs.shape}\n type of imgs: {imgs.dtype}\n ")
             # Apply the on-center convolution kernel
             # print(f"preprocessed_img_on_center: {preprocessed_img_on_center.shape}\n type of preprocessed_img_on_center: {preprocessed_img_on_center.dtype}\n ")
@@ -862,18 +1163,15 @@ def train_epoch(epoch, net, train_loader, optimizer, criterion, scaler, blur_tra
             #         on_center_img = (on_center_img * 255).astype(np.uint8)
             #         off_center_img = (off_center_img * 255).astype(np.uint8)
 
-            #         # Create PIL images from NumPy arrays
+            #         # Create PIL imgs from NumPy arrays
             #         on_center_pil_img = Image.fromarray(on_center_img.transpose(1, 2, 0))
             #         off_center_pil_img = Image.fromarray(off_center_img.transpose(1, 2, 0))
 
-            #         # Save the images
+            #         # Save the imgs
             #         on_center_pil_img.save(os.path.join(save_dir, f"epoch{epoch}_batch{batch_id}_on_center_{i}.png"))
             #         off_center_pil_img.save(os.path.join(save_dir, f"epoch{epoch}_batch{batch_id}_off_center_{i}.png"))
             
-            # Combine on-center and off-center images to create a 6-channel RGBRGB image
-            preprocessed_img_on_center = F.conv2d(imgs.to(device).clone(), on_center_kernel, padding=on_off_kernel_size // 2, groups=3)
-            preprocessed_img_off_center = F.conv2d(imgs.to(device).clone(), off_center_kernel, padding=on_off_kernel_size // 2, groups=3)
-            imgs = torch.cat((preprocessed_img_on_center, preprocessed_img_off_center), dim=1).to(device).half()
+            # Combine on-center and off-center imgs to create a 6-channel RGBRGB image
             # Rescale to [0,1] and then to [0,255] #! no need, just no normalization
             # preprocessed_img_on_center = rescale_to_0_255(rescale_to_0_1(preprocessed_img_on_center))
             # preprocessed_img_off_center = rescale_to_0_255(rescale_to_0_1(preprocessed_img_off_center))
