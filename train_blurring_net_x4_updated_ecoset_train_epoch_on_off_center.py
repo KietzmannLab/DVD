@@ -548,6 +548,10 @@ def evaluate_model(data_loader, model, criterion, hyp, transform=None):
             elif hyp["network"]["byte_flag"]=='mixed_byte':
                 m = nn.ReLU()
                 imgs = torch.cat((m(imgs).byte(), m(-imgs).byte()), dim=1).to(device).half()
+            
+            
+            
+            
             elif hyp["network"]["byte_flag"]=='u_step':
                 imgs[(imgs <= -1)] = 3
                 imgs[(imgs <= -2)] = 4
@@ -597,6 +601,80 @@ def evaluate_model(data_loader, model, criterion, hyp, transform=None):
                 imgs[(imgs >= 1)] *= 1
                 imgs[(imgs > -1) & (imgs < 1)] = 0
                 imgs = imgs.to(device).int().half()  #! Notice that we done the int()
+
+            elif hyp["network"]["byte_flag"]=='custom_steep_double_sigmoid':
+                def custom_steep_double_sigmoid(x, x0=-1, k=0.05):
+                    x0_tensor = torch.tensor(x0, dtype=torch.float32, device=x.device)
+                    k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                    y = torch.where(x < 0,
+                                    255 / (1 + torch.exp((x - x0_tensor) / k_tensor)) + 2,
+                                    -2 / (1 + torch.exp((-x - x0_tensor) / k_tensor)) + 2)
+                    y = torch.clamp(y, 0, 255)
+                    return y.to(device).int().half()
+
+                imgs = custom_steep_double_sigmoid(x, x0=-1, k=0.05) #! Notice that we done the int()
+            elif hyp["network"]["byte_flag"]=='custom_steep_no_clamp_double_sigmoid':
+                def custom_steep_no_clamp_double_sigmoid(x, x0=-1, k=0.05):
+                    x0_tensor = torch.tensor(x0, dtype=torch.float32, device=x.device)
+                    k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                    y = torch.where(x < 0,
+                                    255 / (1 + torch.exp((x - x0_tensor) / k_tensor)) + 2,
+                                    -2 / (1 + torch.exp((-x - x0_tensor) / k_tensor)) + 2)
+                    # y = torch.clamp(y, 0, 255)
+                    return y.to(device).int().half()
+                imgs = custom_steep_no_clamp_double_sigmoid(x, x0=-1, k=0.05) #! Notice that we done the int()
+            elif hyp["network"]["byte_flag"]=='custom_steep_positive_double_sigmoid':
+                def custom_steep_positive_double_sigmoid(x, x0=-1, k=0.05):
+                    x0_tensor = torch.tensor(x0, dtype=torch.float32, device=x.device)
+                    k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                    y = torch.where(x < 0,
+                                    255 / (1 + torch.exp((x - x0_tensor) / k_tensor)),
+                                    2 / (1 + torch.exp((-x - x0_tensor) / k_tensor)))
+                    return y.to(device).int().half()
+                imgs = custom_steep_positive_double_sigmoid(x, x0=-1, k=0.05) #! Notice that we done the int()
+            elif hyp["network"]["byte_flag"]=='custom_shifted_minus_1_steep_sigmoid':
+                def custom_shifted_minus_1_steep_sigmoid(x, x0=0, k=0.05, left_shift=-1, down_shift=-2):
+                    x0_adjusted = x0 + left_shift
+                    x0_tensor = torch.tensor(x0_adjusted, dtype=torch.float32, device=x.device)
+                    k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                    y = 255 / (1 + torch.exp((x - x0_tensor) / k_tensor)) - down_shift
+                    y = torch.clamp(y, 0, 255)
+                    return y.to(device).int().half()
+                imgs = custom_shifted_minus_1_steep_sigmoid(x, x0=0, k=0.05, left_shift=-1, down_shift=-2) #! Notice that we done the int()
+            elif hyp["network"]["byte_flag"]=='custom_shifted_minus_1_not_steep_sigmoid':
+                def custom_shifted_minus_1_not_steep_sigmoid(x, x0=0, k=0.2, left_shift=-1, down_shift=-2):
+                    x0_adjusted = x0 + left_shift
+                    x0_tensor = torch.tensor(x0_adjusted, dtype=torch.float32, device=x.device)
+                    k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                    y = 255 / (1 + torch.exp((x - x0_tensor) / k_tensor)) - down_shift
+                    y = torch.clamp(y, 0, 255)
+                    return y.to(device).int().half()
+                imgs = custom_shifted_minus_1_not_steep_sigmoid(x, x0=0, k=0.2, left_shift=-1, down_shift=-2) #! Notice that we done the int()
+            elif hyp["network"]["byte_flag"]=='custom_shifted_steep_sigmoid':
+                def custom_shifted_steep_sigmoid(x, x0=0, k=0.05, left_shift=-1, down_shift=-2):
+                    x0_adjusted = x0 + left_shift
+                    x0_tensor = torch.tensor(x0_adjusted, dtype=torch.float32, device=x.device)
+                    k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                    y = 255 / (1 + torch.exp((x - x0_tensor) / k_tensor)) - down_shift
+                    y = torch.clamp(y, 0, 255)
+                    return y.to(device).int().half()
+                imgs = custom_shifted_steep_sigmoid(x, x0=0, k=0.05, left_shift=-1, down_shift=-2) #! Notice that we done the int()
+            elif hyp["network"]["byte_flag"]=='custom_shifted_not_steep_sigmoid':
+                def custom_shifted_not_steep_sigmoid(x, x0=0, k=0.2, left_shift=0, down_shift=-2):
+                    x0_adjusted = x0 + left_shift
+                    x0_tensor = torch.tensor(x0_adjusted, dtype=torch.float32, device=x.device)
+                    k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                    y = 255 / (1 + torch.exp((x - x0_tensor) / k_tensor)) - down_shift
+                    y = torch.clamp(y, 0, 255)
+                    return y.to(device).int().half()
+                imgs = custom_shifted_not_steep_sigmoid(x, x0=0, k=0.2, left_shift=0, down_shift=-2)
+
+
+            elif hyp["network"]["byte_flag"]=='strong_flipped_flatter_leaky_relu':
+                imgs[(imgs <= -1)] = -1 * (imgs[(imgs <= -1)]+1)
+                imgs[(imgs >= 1)] *= 100 
+                imgs[(imgs > -1) & (imgs < 1)] = 0
+                imgs = imgs.to(device).int().half() #! Notice that we done the int()
             elif hyp["network"]["byte_flag"]=='strong_flipped_leaky_relu':
                 imgs[(imgs <= -1)] *= -1 
                 imgs[(imgs >= 1)] *= 100
@@ -605,6 +683,11 @@ def evaluate_model(data_loader, model, criterion, hyp, transform=None):
             elif hyp["network"]["byte_flag"]=='strong_rising_leaky_relu':
                 imgs[(imgs <= -1)] = 100 * (imgs[(imgs <= -1)]+1)
                 imgs[(imgs >= 1)] *= 1
+                imgs[(imgs > -1) & (imgs < 1)] = 0
+                imgs = imgs.to(device).int().half()   #! Notice that we done the int()
+            elif hyp["network"]["byte_flag"]=='strong_decreasing_leaky_relu':
+                imgs[(imgs <= -1)] = -100 * (imgs[(imgs <= -1)]+1)
+                imgs[(imgs >= 1)] *= -1
                 imgs[(imgs > -1) & (imgs < 1)] = 0
                 imgs = imgs.to(device).int().half()   #! Notice that we done the int()
             elif hyp["network"]["byte_flag"]=='strong_no_int_leaky_relu':
@@ -1023,11 +1106,85 @@ def train_epoch(epoch, net, train_loader, optimizer, criterion, scaler, blur_tra
             imgs[(imgs >= 2)] *= 1 
             imgs[(imgs > -1) & (imgs < 1)] = 0
             imgs = imgs.to(device).int().half()
+        elif hyp["network"]["byte_flag"]=='strong_flipped_flatter_leaky_relu':
+            imgs[(imgs <= -1)] = -1 * (imgs[(imgs <= -1)]+1)
+            imgs[(imgs >= 1)] *= 100 
+            imgs[(imgs > -1) & (imgs < 1)] = 0
+            imgs = imgs.to(device).int().half() 
+
+
+        elif hyp["network"]["byte_flag"]=='custom_steep_double_sigmoid':
+            def custom_steep_double_sigmoid(x, x0=-1, k=0.05):
+                x0_tensor = torch.tensor(x0, dtype=torch.float32, device=x.device)
+                k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                y = torch.where(x < 0,
+                                255 / (1 + torch.exp((x - x0_tensor) / k_tensor)) + 2,
+                                -2 / (1 + torch.exp((-x - x0_tensor) / k_tensor)) + 2)
+                y = torch.clamp(y, 0, 255)
+                return y.to(device).int().half()
+            imgs = custom_steep_double_sigmoid(x, x0=-1, k=0.05) #! Notice that we done the int()
+        elif hyp["network"]["byte_flag"]=='custom_steep_no_clamp_double_sigmoid':
+            def custom_steep_no_clamp_double_sigmoid(x, x0=-1, k=0.05):
+                x0_tensor = torch.tensor(x0, dtype=torch.float32, device=x.device)
+                k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                y = torch.where(x < 0,
+                                255 / (1 + torch.exp((x - x0_tensor) / k_tensor)) + 2,
+                                -2 / (1 + torch.exp((-x - x0_tensor) / k_tensor)) + 2)
+                # y = torch.clamp(y, 0, 255)
+                return y.to(device).int().half()
+            imgs = custom_steep_no_clamp_double_sigmoid(x, x0=-1, k=0.05) #! Notice that we done the int()
+        elif hyp["network"]["byte_flag"]=='custom_steep_positive_double_sigmoid':
+            def custom_steep_positive_double_sigmoid(x, x0=-1, k=0.05):
+                x0_tensor = torch.tensor(x0, dtype=torch.float32, device=x.device)
+                k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                y = torch.where(x < 0,
+                                255 / (1 + torch.exp((x - x0_tensor) / k_tensor)),
+                                2 / (1 + torch.exp((-x - x0_tensor) / k_tensor)))
+                return y.to(device).int().half()
+            imgs = custom_steep_positive_double_sigmoid(x, x0=-1, k=0.05) #! Notice that we done the int()
+        elif hyp["network"]["byte_flag"]=='custom_shifted_minus_1_steep_sigmoid':
+            def custom_shifted_minus_1_steep_sigmoid(x, x0=0, k=0.05, left_shift=-1, down_shift=-2):
+                x0_adjusted = x0 + left_shift
+                x0_tensor = torch.tensor(x0_adjusted, dtype=torch.float32, device=x.device)
+                k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                y = 255 / (1 + torch.exp((x - x0_tensor) / k_tensor)) - down_shift
+                y = torch.clamp(y, 0, 255)
+                return y.to(device).int().half()
+            imgs = custom_shifted_minus_1_steep_sigmoid(x, x0=0, k=0.05, left_shift=-1, down_shift=-2) #! Notice that we done the int()
+        elif hyp["network"]["byte_flag"]=='custom_shifted_minus_1_not_steep_sigmoid':
+            def custom_shifted_minus_1_not_steep_sigmoid(x, x0=0, k=0.2, left_shift=-1, down_shift=-2):
+                x0_adjusted = x0 + left_shift
+                x0_tensor = torch.tensor(x0_adjusted, dtype=torch.float32, device=x.device)
+                k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                y = 255 / (1 + torch.exp((x - x0_tensor) / k_tensor)) - down_shift
+                y = torch.clamp(y, 0, 255)
+                return y.to(device).int().half()
+            imgs = custom_shifted_minus_1_not_steep_sigmoid(x, x0=0, k=0.2, left_shift=-1, down_shift=-2) #! Notice that we done the int()
+        elif hyp["network"]["byte_flag"]=='custom_shifted_steep_sigmoid':
+            def custom_shifted_steep_sigmoid(x, x0=0, k=0.05, left_shift=-1, down_shift=-2):
+                x0_adjusted = x0 + left_shift
+                x0_tensor = torch.tensor(x0_adjusted, dtype=torch.float32, device=x.device)
+                k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                y = 255 / (1 + torch.exp((x - x0_tensor) / k_tensor)) - down_shift
+                y = torch.clamp(y, 0, 255)
+                return y.to(device).int().half()
+            imgs = custom_shifted_steep_sigmoid(x, x0=0, k=0.05, left_shift=-1, down_shift=-2) #! Notice that we done the int()
+        elif hyp["network"]["byte_flag"]=='custom_shifted_not_steep_sigmoid':
+            def custom_shifted_not_steep_sigmoid(x, x0=0, k=0.2, left_shift=0, down_shift=-2):
+                x0_adjusted = x0 + left_shift
+                x0_tensor = torch.tensor(x0_adjusted, dtype=torch.float32, device=x.device)
+                k_tensor = torch.tensor(k, dtype=torch.float32, device=x.device)
+                y = 255 / (1 + torch.exp((x - x0_tensor) / k_tensor)) - down_shift
+                y = torch.clamp(y, 0, 255)
+                return y.to(device).int().half()
+            imgs = custom_shifted_not_steep_sigmoid(x, x0=0, k=0.2, left_shift=0, down_shift=-2)
+
+
         elif hyp["network"]["byte_flag"]=='strong_flatter_leaky_relu':
-                imgs[(imgs <= -1)] = -100 * (imgs[(imgs <= -1)]+1)
-                imgs[(imgs >= 1)] *= 1
-                imgs[(imgs > -1) & (imgs < 1)] = 0
-                imgs = imgs.to(device).int().half()
+            imgs[(imgs <= -1)] = -100 * (imgs[(imgs <= -1)]+1)
+            imgs[(imgs >= 1)] *= 1
+            imgs[(imgs > -1) & (imgs < 1)] = 0
+            imgs = imgs.to(device).int().half()
         elif hyp["network"]["byte_flag"]=='strong_flipped_leaky_relu':
             imgs[(imgs <= -1)] *= -1 
             imgs[(imgs >= 1)] *= 100
@@ -1038,6 +1195,11 @@ def train_epoch(epoch, net, train_loader, optimizer, criterion, scaler, blur_tra
             imgs[(imgs >= 1)] *= 1
             imgs[(imgs > -1) & (imgs < 1)] = 0
             imgs = imgs.to(device).int().half()
+        elif hyp["network"]["byte_flag"]=='strong_decreasing_leaky_relu':
+            imgs[(imgs <= -1)] = -100 * (imgs[(imgs <= -1)]+1)
+            imgs[(imgs >= 1)] *= -1
+            imgs[(imgs > -1) & (imgs < 1)] = 0
+            imgs = imgs.to(device).int().half()   #! Notice that we done the int()
         # 'strong_no_int_leaky_relu', 'negative_weak_flatter_leaky_relu', 'positive_weak_flatter_leaky_relu'
         elif hyp["network"]["byte_flag"]=='strong_no_int_leaky_relu':
             imgs[(imgs <= -1)] *= -100 

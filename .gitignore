@@ -22,3 +22,4 @@ all_tnn_runs_jobs
 analysis_all_tnn_jobs
 ./wandb/
 /logs/
+slurm*

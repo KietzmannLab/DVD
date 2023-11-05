@@ -104,6 +104,99 @@
 
 ### --------------------------------------------------------------------------------
 
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from scipy.stats import norm
+
+# # Define the original activation function
+# def polarized_amplified_leaky_relu(x):
+#     if x <= -1:
+#         return -100
+#     elif -1 < x < 1:
+#         return 0
+#     else:  # x >= 1
+#         return 1
+
+# # Define the function for applying the original activation
+# def apply_activation(x):
+#     if x <= -1:
+#         return -100 * x
+#     elif -1 < x < 1:
+#         return 0
+#     else:  # x >= 1
+#         return x
+
+# # Define the function for applying the modified activation
+# def apply_modified_activation(x):
+#     if x <= -1:
+#         return -100 * (x + 1)
+#     elif -1 < x < 1:
+#         return 0
+#     else:  # x >= 1
+#         return x
+
+# # Generate a normal distribution of x values within the range [-2.5, 2.5]
+# x_vals = np.random.normal(loc=0, scale=1, size=10000)
+# x_vals = x_vals[(x_vals >= -2.5) & (x_vals <= 2.5)]
+# x_vals_sorted = np.sort(x_vals)
+
+# # Create a figure with six subplots (2 rows, 3 columns)
+# fig, axs = plt.subplots(2, 3, figsize=(18, 12))
+
+# # Plot the normal distribution curve in both rows
+# density_curve_x = np.linspace(-2.5, 2.5, 1000)
+# density_curve_y = norm.pdf(density_curve_x, loc=0, scale=1)
+# for row in range(2):
+#     axs[row, 0].plot(density_curve_x, density_curve_y, color='blue')
+#     axs[row, 0].set_title("Normal Distribution of Images")
+#     axs[row, 0].set_xlabel("x")
+#     axs[row, 0].set_ylabel("Density")
+#     axs[row, 0].grid(True)
+
+# # Plot the original activation function
+# x_plot = np.linspace(-2.5, 2.5, 1000)
+# y_plot = [polarized_amplified_leaky_relu(x) for x in x_plot]
+# axs[0, 1].step(x_plot, y_plot, where='post')
+# axs[0, 1].set_title("Polarized Amplified Leaky ReLU Activation Function")
+# axs[0, 1].set_xlabel("x")
+# axs[0, 1].set_ylabel("y")
+# axs[0, 1].grid(True)
+
+# # Plot the modified activation function in the second row
+# axs[1, 1].step(x_plot, y_plot, where='post')  # The function shape remains the same
+# axs[1, 1].set_title("Modified Polarized Amplified Leaky ReLU Activation Function")
+# axs[1, 1].set_xlabel("x")
+# axs[1, 1].set_ylabel("y")
+# axs[1, 1].grid(True)
+
+# # Generate activated values using the original activation
+# activated_values = [apply_activation(x) for x in x_vals_sorted]
+# axs[0, 2].plot(x_vals_sorted, activated_values, color='blue', linewidth=2)
+# axs[0, 2].set_title("Images After Original Activation")
+# axs[0, 2].set_xlabel("x")
+# axs[0, 2].set_ylabel("y")
+# axs[0, 2].grid(True)
+
+# # Generate activated values using the modified activation
+# activated_modified_values = [apply_modified_activation(x) for x in x_vals_sorted]
+# axs[1, 2].plot(x_vals_sorted, activated_modified_values, color='blue', linewidth=2)
+# axs[1, 2].set_title("Images After Modified Activation")
+# axs[1, 2].set_xlabel("x")
+# axs[1, 2].set_ylabel("y")
+# axs[1, 2].grid(True)
+
+# # Adjust the layout
+# plt.tight_layout()
+
+# # Save the combined plot
+# save_dir = '/home/student/l/lzejin/codebase/blurring4texture2shape1file/save_dir/actiation_funcs_plots/'
+# plt.savefig(save_dir + "Polarized_Amplified_Leaky_ReLU_Six_Plots.png")
+
+# plt.show()
+
+#--------------------------------------------------------------------------------
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
@@ -135,61 +228,108 @@ def apply_modified_activation(x):
     else:  # x >= 1
         return x
 
+
+def strong_flipped_leaky_relu(x):
+    if x <= -1:
+        return -1
+    elif x >= 1:
+        return 100
+    else:
+        return 0
+
+def apply_strong_flipped_activation(x):
+    if x <= -1:
+        return -x  # Applying strong flipped activation
+    elif x >= 1:
+        return 100 * x  # Applying strong flipped activation
+    else:
+        return 0
+
+def strong_rising_leaky_relu(x):
+    if x <= -1:
+        return 100 
+    elif x >= 1:
+        return 1
+    else:
+        return 0
+
+def apply_strong_rising_activation(x):
+    if x <= -1:
+        return 100 * (x + 1)  # Applying strong rising activation
+    elif x >= 1:
+        return x  # Applying strong rising activation
+    else:
+        return 0
+
+def strong_no_int_leaky_relu(x):
+    if x <= -2:
+        return -100
+    elif x >= 2:
+        return 1
+    elif x <= -1:
+        return -100
+    elif x >= 1:
+        return x
+    else:
+        return 0
+
 # Generate a normal distribution of x values within the range [-2.5, 2.5]
 x_vals = np.random.normal(loc=0, scale=1, size=10000)
 x_vals = x_vals[(x_vals >= -2.5) & (x_vals <= 2.5)]
 x_vals_sorted = np.sort(x_vals)
 
-# Create a figure with six subplots (2 rows, 3 columns)
-fig, axs = plt.subplots(2, 3, figsize=(18, 12))
+# Create a figure with subplots
+fig, axs = plt.subplots(4, 3, figsize=(18, 24))
 
-# Plot the normal distribution curve in both rows
+# Plot the normal distribution curve in all rows
 density_curve_x = np.linspace(-2.5, 2.5, 1000)
 density_curve_y = norm.pdf(density_curve_x, loc=0, scale=1)
-for row in range(2):
+for row in range(4):
     axs[row, 0].plot(density_curve_x, density_curve_y, color='blue')
     axs[row, 0].set_title("Normal Distribution of Images")
     axs[row, 0].set_xlabel("x")
     axs[row, 0].set_ylabel("Density")
     axs[row, 0].grid(True)
 
-# Plot the original activation function
-x_plot = np.linspace(-2.5, 2.5, 1000)
-y_plot = [polarized_amplified_leaky_relu(x) for x in x_plot]
-axs[0, 1].step(x_plot, y_plot, where='post')
-axs[0, 1].set_title("Polarized Amplified Leaky ReLU Activation Function")
-axs[0, 1].set_xlabel("x")
-axs[0, 1].set_ylabel("y")
-axs[0, 1].grid(True)
+# Activation functions for plotting
+activation_functions = [polarized_amplified_leaky_relu, polarized_amplified_leaky_relu, strong_flipped_leaky_relu, strong_rising_leaky_relu]
+activation_apply_functions = [apply_activation, apply_modified_activation, apply_strong_flipped_activation, apply_strong_rising_activation]
+activation_titles = ["Original", "Modified", "Strong Flipped", "Strong Rising"]
+# LaTeX equations for each activation function
+# latex_equations = [
+#     "$f(x) = -100$, if $x \leq -1$; $0$, if $-1 < x < 1$; $1$, if $x \geq 1$",
+#     "$f(x) = -100(x + 1)$, if $x \leq -1$; $0$, if $-1 < x < 1$; $x$, if $x \geq 1$",
+#     "$f(x) = -1$, if $x \leq -1$; $100$, if $x \geq 1$; $0$, otherwise",
+#     "$f(x) = 100$, if $x \leq -1$; $1$, if $x \geq 1$; $0$, otherwise"
+# ]
 
-# Plot the modified activation function in the second row
-axs[1, 1].step(x_plot, y_plot, where='post')  # The function shape remains the same
-axs[1, 1].set_title("Modified Polarized Amplified Leaky ReLU Activation Function")
-axs[1, 1].set_xlabel("x")
-axs[1, 1].set_ylabel("y")
-axs[1, 1].grid(True)
+ 
+# Plot the activation functions and their effects
+for i in range(4):
+    # Plot the activation function
+    y_plot = [activation_functions[i](x) for x in density_curve_x]
+    axs[i, 1].step(density_curve_x, y_plot, where='post')
+    axs[i, 1].set_title(f"{activation_titles[i]} Activation Function")
+    axs[i, 1].set_xlabel("x")
+    axs[i, 1].set_ylabel("y")
+    axs[i, 1].grid(True)
 
-# Generate activated values using the original activation
-activated_values = [apply_activation(x) for x in x_vals_sorted]
-axs[0, 2].plot(x_vals_sorted, activated_values, color='blue', linewidth=2)
-axs[0, 2].set_title("Images After Original Activation")
-axs[0, 2].set_xlabel("x")
-axs[0, 2].set_ylabel("y")
-axs[0, 2].grid(True)
+    # Plot the effect of the activation function
+    activated_values = [activation_apply_functions[i](x) for x in x_vals_sorted]
+    axs[i, 2].plot(x_vals_sorted, activated_values, color='blue', linewidth=2)
+    axs[i, 2].set_title(f"Images After {activation_titles[i]} Activation")
+    axs[i, 2].set_xlabel("x")
+    axs[i, 2].set_ylabel("y")
+    axs[i, 2].grid(True)
 
-# Generate activated values using the modified activation
-activated_modified_values = [apply_modified_activation(x) for x in x_vals_sorted]
-axs[1, 2].plot(x_vals_sorted, activated_modified_values, color='blue', linewidth=2)
-axs[1, 2].set_title("Images After Modified Activation")
-axs[1, 2].set_xlabel("x")
-axs[1, 2].set_ylabel("y")
-axs[1, 2].grid(True)
+    # Add LaTeX equation next to the line in each plot
+    # axs[i, 1].text(1.5, 50, latex_equations[i], fontsize=12, bbox=dict(facecolor='white', alpha=0.5))
 
 # Adjust the layout
 plt.tight_layout()
 
 # Save the combined plot
 save_dir = '/home/student/l/lzejin/codebase/blurring4texture2shape1file/save_dir/actiation_funcs_plots/'
-plt.savefig(save_dir + "Polarized_Amplified_Leaky_ReLU_Six_Plots.png")
+plt.savefig(save_dir + "Various_Activation_Functions_Plots.png",dpi=300)
 
 plt.show()
