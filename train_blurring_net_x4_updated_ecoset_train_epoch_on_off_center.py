@@ -110,95 +110,8 @@ def get_hyp(args):
     }
 
 
-###
-## on-center and off-center kernel size
-###
-# Function to create on-center and off-center kernels for a given size
-
-def rescale_to_01(tensor):
-    min_val = tensor.min()
-    max_val = tensor.max()
-    return (tensor - min_val) / (max_val - min_val)
 
 
-# def apply_gaussian_difference_batch(imgs, sigma1=1, sigma2=28, scale_to_0_1=False):
-#     processed_imgs = []
-    
-#     for image in imgs:
-#         # Convert each input image to a PIL Image
-#         img_pil = transforms.functional.to_pil_image(image.clone().cpu())
-
-#         # Apply Gaussian blurs with specified radii
-#         gaussian1 = img_pil.filter(ImageFilter.GaussianBlur(radius=sigma1))
-#         gaussian2 = img_pil.filter(ImageFilter.GaussianBlur(radius=sigma2))
-
-#         # Calculate the difference between the two blurred imgs
-#         result_image = ImageChops.difference(gaussian1, gaussian2)
-        
-#         # Convert to a PyTorch tensor
-#         result_image = transforms.functional.to_tensor(result_image)
-#         if scale_to_0_1:  
-#             result_image /= 255.0  # Scale to the range [0, 1]
-
-#         processed_imgs.append(result_image)
-    
-#     return processed_imgs
-
-def apply_gaussian_difference_batch(imgs, sigma1=1, sigma2=28, scale_to_0_1=False):
-    device = imgs.device  # Get the device (CPU or GPU) of the input imgs
-    processed_imgs = []
-
-    for image in imgs:
-        # Convert the PyTorch tensor to a NumPy array
-        img_np = image.cpu().numpy()
-        
-        # Apply Gaussian blurs using PyTorch operations on the GPU
-        img_tensor = torch.from_numpy(img_np).to(device)
-        kernel_size1 = int(8*sigma1) + (0 if int(8*sigma1) % 2 else 1)
-        kernel_size2 = int(8*sigma2) + (0 if int(8*sigma2) % 2 else 1)
-        gaussian1 = transforms.functional.gaussian_blur(img_tensor, kernel_size=kernel_size1, sigma=sigma1)
-        gaussian2 = transforms.functional.gaussian_blur(img_tensor, kernel_size=kernel_size2, sigma=sigma2)
-
-        # Calculate the difference between the two blurred imgs
-        result_image = torch.abs(gaussian1 - gaussian2)
-        
-        if scale_to_0_1:
-            result_image /= result_image.max()  # Scale to the range [0, 1]
-
-        processed_imgs.append(result_image)
-
-    return processed_imgs
-
-
-def create_kernels(size, enhance_factor=1):
-    """Create on-center and off-center kernels for a given size."""
-    
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    # Central value
-    central = 1/((size-2)*(size-2)) *enhance_factor # Adjust as needed
-    
-    # Surrounding value
-    surrounding = -1/(size*size-(size-2)*(size-2)) *enhance_factor  # Adjust as needed
-
-    # Create on-center kernel
-    on_center_kernel = torch.full((3, 1, size, size), surrounding, dtype=torch.float32).to(device)
-    on_center_kernel[:, :, 1:size-1, 1:size-1] = central # the only center is size // 2
-
-    # Create off-center kernel (reverse of on-center)
-    off_center_kernel = -on_center_kernel.clone()
-    off_center_kernel[:, :, 1:size-1, 1:size-1] = -central
-
-    return on_center_kernel, off_center_kernel
-
-def rescale_to_0_1(tensor):
-    # Min-Max normalization
-    min_val = tensor.min()
-    max_val = tensor.max()
-    tensor = (tensor - min_val) / (max_val - min_val)
-    return tensor
-
-def rescale_to_0_255(tensor):
-    return tensor * 255.0
 
 ##############################
 ## Loading the dataset loaders
@@ -420,6 +333,67 @@ def watershed_segmentation_single_channel(channel, save_path=None):
 
     return segmented_channel
 
+def rescale_to_01(tensor):
+    min_val = tensor.min()
+    max_val = tensor.max()
+    return (tensor - min_val) / (max_val - min_val)
+
+def apply_gaussian_difference_batch(imgs, sigma1=1, sigma2=28, scale_to_0_1=False):
+    device = imgs.device  # Get the device (CPU or GPU) of the input imgs
+    processed_imgs = []
+
+    for image in imgs:
+        # Convert the PyTorch tensor to a NumPy array
+        img_np = image.cpu().numpy()
+        
+        # Apply Gaussian blurs using PyTorch operations on the GPU
+        img_tensor = torch.from_numpy(img_np).to(device)
+        kernel_size1 = int(8*sigma1) + (0 if int(8*sigma1) % 2 else 1)
+        kernel_size2 = int(8*sigma2) + (0 if int(8*sigma2) % 2 else 1)
+        gaussian1 = transforms.functional.gaussian_blur(img_tensor, kernel_size=kernel_size1, sigma=sigma1)
+        gaussian2 = transforms.functional.gaussian_blur(img_tensor, kernel_size=kernel_size2, sigma=sigma2)
+
+        # Calculate the difference between the two blurred imgs
+        result_image = torch.abs(gaussian1 - gaussian2)
+        
+        if scale_to_0_1:
+            result_image /= result_image.max()  # Scale to the range [0, 1]
+
+        processed_imgs.append(result_image)
+
+    return processed_imgs
+
+
+def create_kernels(size, enhance_factor=1):
+    """Create on-center and off-center kernels for a given size."""
+    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # Central value
+    central = 1/((size-2)*(size-2)) *enhance_factor # Adjust as needed
+    
+    # Surrounding value
+    surrounding = -1/(size*size-(size-2)*(size-2)) *enhance_factor  # Adjust as needed
+
+    # Create on-center kernel
+    on_center_kernel = torch.full((3, 1, size, size), surrounding, dtype=torch.float32).to(device)
+    on_center_kernel[:, :, 1:size-1, 1:size-1] = central # the only center is size // 2
+
+    # Create off-center kernel (reverse of on-center)
+    off_center_kernel = -on_center_kernel.clone()
+    off_center_kernel[:, :, 1:size-1, 1:size-1] = -central
+
+    return on_center_kernel, off_center_kernel
+
+def rescale_to_0_1(tensor):
+    # Min-Max normalization
+    min_val = tensor.min()
+    max_val = tensor.max()
+    tensor = (tensor - min_val) / (max_val - min_val)
+    return tensor
+
+def rescale_to_0_255(tensor):
+    return tensor * 255.0
+
 ##############################
 ## Logging functions
 ##############################
@@ -548,9 +522,6 @@ def evaluate_model(data_loader, model, criterion, hyp, transform=None):
             elif hyp["network"]["byte_flag"]=='mixed_byte':
                 m = nn.ReLU()
                 imgs = torch.cat((m(imgs).byte(), m(-imgs).byte()), dim=1).to(device).half()
-            
-            
-            
             
             elif hyp["network"]["byte_flag"]=='u_step':
                 imgs[(imgs <= -1)] = 3
