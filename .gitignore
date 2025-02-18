@@ -44,8 +44,4 @@ results/
 tests/
 logs/
 logs/*
-evd/evd/datasets/fairface
-evd/datasets/__pycache__
-evd/models/__pycache__
-evd/evd/__pycache__
 *__pycache__*
