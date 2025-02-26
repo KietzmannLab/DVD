@@ -1,0 +1,147 @@
+#!/bin/bash
+#! How much wallclock time will be required?
+#SBATCH --time=47:59:00 # Run time
+#! Name of the job:
+#SBTACH --job-name H100-test
+#! Specify the number of GPUs per node (between 1 and n; must be n if nodes>1).
+#SBATCH --gres=gpu:1 #*
+
+#! How much wmemory will be required?
+#SBATCH --mem 160G #!TODO cannot be too large, the whole cluster only has 2T --> analysis ecoset, we need to be large
+#! How many cpus will be required?
+#SBATCH -c 10 #TODO
+#! Which partition? klab-gpu klab-l40s gpu
+#SBATCH -p klab-gpu
+#! How many whole nodes should be allocated?
+#SBATCH --nodes 1  # Number of reaquested nodes 
+#! Note probably this should not exceed the total number of GPUs in use.
+#SBATCH --ntasks=1 #* 2 for 2 gpu
+##SBATCH --ntasks-per-node=1          # Number of tasks per node (e.g., GPUs per node)
+
+#! error and output file?
+#SBATCH --error=./logs/slurm_logs/h100_multi_error.o%j
+#SBATCH --output=./logs/slurm_logs/h100_multi_output.o%j
+#! What types of email messages do you wish to receive?
+#SBATCH --mail-user=lzejin@uni-osnabrueck.de
+##SBATCH --mail-type=BEGIN
+#SBATCH --mail-type=END
+#SBATCH --mail-type=FAIL
+#SBATCH --mail-type=REQUEUE
+##SBATCH --mail-type=ALL
+
+echo "running in shell: " "$SHELL"
+export NCCL_SOCKET_IFNAME=lo
+
+#! new add by zejin
+# Set environment variables for NCCL and PyTorch
+export OMP_NUM_THREADS=1
+export NCCL_DEBUG=INFO
+
+
+# add by myself
+spack unload #unload all the previously loaded packages and load the required packages below
+echo $CONDA_PREFIX # to print the path
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/ #Set the path for Nvidia libs
+export XLA_FLAGS=--xla_gpu_cuda_data_dir=$CONDA_PREFIX #XLA path specification
+echo $LD_LIBRARY_PATH # to print the path
+
+# add by myself 16th Dec
+export CUDA_HOME=$CONDA_PREFIX
+export PATH=$CUDA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+
+## Please add any modules you want to load here, as an example we have commented out the modules
+## that you may need such as cuda, cudnn, miniconda3, uncomment them if that is your use case 
+## term handler the function is executed once the job gets the TERM signal
+spack load cuda@11.8.0
+spack load cudnn@8.6.0.163-11.8
+eval "$(conda shell.bash hook)"
+conda activate h100
+
+## -------------------------------------------------------------------------------------------------------------- ##
+## Current analysis
+## -------------------------------------------------------------------------------------------------------------- ##
+# python get_acc_under_sigma_blurring_attack.py
+# python get_agreement_with_diff_V1_IT_neural_data.py
+
+## -------------------------------------------------------------------------------------------------------------- ##
+## Current training
+## -------------------------------------------------------------------------------------------------------------- ##
+
+#! full ecoset
+# torchrun --nproc_per_node=2 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10010 scripts/main.py --arch resnet50 --dataset-name ecoset_square256 --development-strategy evd --epochs 150 --months-per-epoch 2 --time-order normal  --contrast_drop_speed_factor 0.2 --decrease_contrast_drop_speed_factor_every_n_month 100 --decrease_speed_of_contrast_drop_speed_factor_every_n_month 2 --image-size 256 --batch-size 512 '/share/klab/datasets'
+
+
+# Setting for development strategy
+#! --lr-scheduler fixed l4 is batch_size/256 * lr set here
+# torchrun --nproc_per_node=2 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10020 scripts/main.py --arch resnet50 --lr-scheduler fixed --lr 5e-5 --label-smoothing 0.1 --dataset-name texture2shape_miniecoset --development-strategy evd --time-order normal --months-per-epoch 2 --contrast_threshold 0.2 --decrease_contrast_threshold_spd 100 --epochs 300 --image-size 256 --batch-size 512 '/share/klab/datasets'
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10021 scripts/main.py --arch resnet50 --lr-scheduler fixed --lr 5e-5 --label-smoothing 0.1 --dataset-name texture2shape_miniecoset --development-strategy evd --time-order normal --months-per-epoch 2 --contrast_threshold 0.2 --decrease_contrast_threshold_spd 25 --epochs 300 --image-size 256 --batch-size 512 '/share/klab/datasets'
+# torchrun --nproc_per_node=2 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10012 scripts/main.py --arch resnet50 --lr-scheduler fixed --lr 1e-4 --label-smoothing 0.1 --dataset-name texture2shape_miniecoset --development-strategy evd --time-order normal --months-per-epoch 2 --contrast_threshold 0.2 --decrease_contrast_threshold_spd 100 --epochs 300 --image-size 256 --batch-size 512 '/share/klab/datasets'
+# mini 1 gpu
+# torchrun --nproc_per_node=2 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10000 scripts/main.py --arch resnet50 --label-smoothing 0.1 --dataset-name texture2shape_miniecoset --development-strategy evd --time-order normal --months-per-epoch 2 --contrast_threshold 0.2 --decrease_contrast_threshold_spd 100 --epochs 300 --image-size 256 --batch-size 512 '/share/klab/datasets'
+# torchrun --nproc_per_node=2 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10001 scripts/main.py --arch resnet50 --label-smoothing 0.1 --dataset-name texture2shape_miniecoset --development-strategy evd --time-order normal --months-per-epoch 2 --contrast_threshold 0.2 --decrease_contrast_threshold_spd 25 --epochs 300 --image-size 256 --batch-size 512 '/share/klab/datasets'
+# torchrun --nproc_per_node=2 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10002 scripts/main.py --arch resnet50 --label-smoothing 0.1 --dataset-name texture2shape_miniecoset --development-strategy evd --time-order normal --months-per-epoch 2 --contrast_threshold 0.2 --decrease_contrast_threshold_spd 50 --epochs 300 --image-size 256 --batch-size 512 '/share/klab/datasets'
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10003 scripts/main.py --arch resnet50 --label-smoothing 0.1 --dataset-name texture2shape_miniecoset --development-strategy adult --time-order normal --months-per-epoch 2 --contrast_threshold 0.2 --decrease_contrast_threshold_spd 100 --epochs 300 --image-size 256 --batch-size 512 '/share/klab/datasets'
+
+#* FEB 20th main | no seed to speed up | looks werid in 2 gu Loss nan two runs sepratel;y ony 256 natch | 512  133s 1024 144 s 
+# torchrun --nproc_per_node=2 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10009 scripts/main.py --arch resnet50 --dataset-name texture2shape_miniecoset --development-strategy evd --epochs 150 --months-per-epoch 2 --time-order normal  --contrast_drop_speed_factor 0.2 --decrease_contrast_drop_speed_factor_every_n_month 100 --decrease_speed_of_contrast_drop_speed_factor_every_n_month 2 --image-size 256 --batch-size 512 '/share/klab/datasets'
+# audlt
+# torchrun --nproc_per_node=2 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10008 scripts/main.py --arch resnet50 --dataset-name texture2shape_miniecoset --development-strategy adult --epochs 150 --image-size 256 --batch-size 512 '/share/klab/datasets'
+#* simclr  | somehow it works with 512 batch size while above does not
+# torchrun --nproc_per_node=2 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10004 scripts/main_simclr.py --arch resnet50 --dataset-name texture2shape_miniecoset --development-strategy evd --epochs 150 --months-per-epoch 2 --time-order normal  --contrast_drop_speed_factor 0.2 --decrease_contrast_drop_speed_factor_every_n_month 100 --decrease_speed_of_contrast_drop_speed_factor_every_n_month 2 --image-size 256 '/share/klab/datasets'
+
+#* works for heavily augmented data
+#* audlt
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10012 main_simclr.py --arch resnet50 --epochs 300 --dataset-name texture2shape_miniecoset '/share/klab/datasets'
+#* finetune | runnning
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=12305 main_lincls.py --arch resnet50 --epochs 300  --pretrained runs/Feb01_01-51-48_hpc3-53/checkpoint_299.pth --saving-name 'adult' --dataset-name texture2shape_miniecoset '/share/klab/datasets'
+
+#* EVD both gpu and kab-gpu
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10003 main_simclr.py --arch resnet50 --epochs 300 --dataset-name texture2shape_miniecoset --development-strategy evd --months-per-epoch 1 --time-order normal  --contrast_drop_speed_factor 0.1 --decrease_contrast_drop_speed_factor_every_n_month 36 --decrease_speed_of_contrast_drop_speed_factor_every_n_month 2 --image-size 256 '/share/klab/datasets'
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10003 main_simclr.py --arch resnet50 --epochs 300 --dataset-name texture2shape_miniecoset --development-strategy evd --months-per-epoch 1 --time-order normal  --contrast_drop_speed_factor 0.05 --decrease_contrast_drop_speed_factor_every_n_month 36 --decrease_speed_of_contrast_drop_speed_factor_every_n_month 2 --image-size 256 '/share/klab/datasets'
+#* finetune# Feb04_11-22-14_klab-1
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=12305 main_lincls.py --arch resnet50 --epochs 300  --pretrained runs/Feb04_11-22-14_klab-1/checkpoint_299.pth --saving-name 'evd_Feb04_11-22-14_klab-1_v2' --dataset-name texture2shape_miniecoset '/share/klab/datasets'
+#* Feb08_06-28-42_hpc3-54
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=12305 main_lincls.py --arch resnet50 --epochs 300  --pretrained runs/Feb08_06-28-42_hpc3-54/checkpoint_299.pth --saving-name 'Feb08_06-28-42_hpc3-54' --dataset-name texture2shape_miniecoset '/share/klab/datasets'
+
+#! resume
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10003 main_simclr.py --arch resnet50 --epochs 300 --dataset-name texture2shape_miniecoset --resume runs/Feb06_19-37-46_klab-1/checkpoint_99.pth --development-strategy evd --months-per-epoch 1 --time-order normal  --contrast_drop_speed_factor 0.05 --decrease_contrast_drop_speed_factor_every_n_month 36 --decrease_speed_of_contrast_drop_speed_factor_every_n_month 2 --image-size 256 '/share/klab/datasets'
+
+#TODO data aug not enough?
+#* miniecoset + adult
+#! more crazy aug
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10012 main_simclr.py --arch resnet50 --epochs 300 --dataset-name texture2shape_miniecoset '/share/klab/datasets'
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10001 main_simclr.py --arch resnet50 --epochs 300 --dataset-name texture2shape_miniecoset '/share/klab/datasets'
+#* evd
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10002 main_simclr.py --arch resnet50 --epochs 300 --dataset-name texture2shape_miniecoset --development-strategy evd --months-per-epoch 1 --time-order normal  --contrast_drop_speed_factor 0.05 --decrease_contrast_drop_speed_factor_every_n_month 36 --decrease_speed_of_contrast_drop_speed_factor_every_n_month 2 --image-size 256 '/share/klab/datasets'
+#lr --lr 1e-3
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10005 main_simclr.py --arch resnet50 --epochs 300 --dataset-name texture2shape_miniecoset --lr 1e-3 --development-strategy evd --months-per-epoch 1 --time-order normal  --contrast_drop_speed_factor 0.05 --decrease_contrast_drop_speed_factor_every_n_month 36 --decrease_speed_of_contrast_drop_speed_factor_every_n_month 2 --image-size 256 '/share/klab/datasets'
+#* --resume and keep training to 600epochs
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10002 main_simclr.py --arch resnet50 --epochs 900 --dataset-name texture2shape_miniecoset --development-strategy evd --resume runs/Jan23_01-41-42_hpc3-54/checkpoint_299.pth --months-per-epoch 1 --time-order normal  --contrast_drop_speed_factor 0.05 --decrease_contrast_drop_speed_factor_every_n_month 36 --decrease_speed_of_contrast_drop_speed_factor_every_n_month 2 --image-size 256 '/share/klab/datasets'
+#* fullcoset + evd
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10004 main_simclr.py --arch resnet50 --epochs 300 --dataset-name ecoset_square256 --development-strategy evd --months-per-epoch 1 --time-order normal  --contrast_drop_speed_factor 0.05 --decrease_contrast_drop_speed_factor_every_n_month 36 --decrease_speed_of_contrast_drop_speed_factor_every_n_month 2 --image-size 256 '/share/klab/datasets'
+
+#* finetune | runnning
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=12305 main_lincls.py --arch resnet50 --epochs 300  --pretrained runs/Feb01_01-51-48_hpc3-53/checkpoint_299.pth --saving-name 'adult' --dataset-name texture2shape_miniecoset '/share/klab/datasets'
+
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=12345 main_lincls.py --arch resnet50 --epochs 300  --pretrained runs/Jan23_01-41-42_hpc3-54/checkpoint_299.pth --saving-name 'evd_ep299' --dataset-name texture2shape_miniecoset '/share/klab/datasets'
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=12346 main_lincls.py --arch resnet50 --lr 1e-3 --epochs 300  --pretrained runs/Jan23_01-41-42_hpc3-54/checkpoint_2999.pth --saving-name 'evd_ep299_lr_1e-4' --dataset-name texture2shape_miniecoset '/share/klab/datasets'
+#* 649
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=12346 main_lincls.py --arch resnet50 --epochs 300  --pretrained runs/Jan24_20-35-02_hpc3-54/checkpoint_649.pth --saving-name 'evd_ep649_lr_1e-4' --dataset-name texture2shape_miniecoset '/share/klab/datasets'
+
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=12345 main_simclr.py --arch resnet50 --epochs 300 '/share/klab/datasets'
+
+# torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=12347 main_lincls.py --arch resnet50 --epochs 300  --pretrained checkpoint_299.pth '/share/klab/datasets' 
+ 
+# python main_simsiam.py \
+#   -a resnet50 \
+#   --dist-url 'tcp://localhost:10001' --multiprocessing-distributed --world-size 1 --rank 0 \
+#   --fix-pred-lr \
+#   '/share/klab/datasets'
+
+
+# python main_lincls.py \
+#   -a resnet50 \
+#   --dist-url 'tcp://localhost:10001' --multiprocessing-distributed --world-size 1 --rank 0 \
+#   --pretrained checkpoint_0099.pth.tar \
+#   '/share/klab/datasets'
