@@ -146,6 +146,10 @@ def save_checkpoint(state, is_best, filename="checkpoint.pth"):
     if is_best:
         shutil.copyfile(filename, os.path.join(os.path.dirname(filename), "checkpoint_best.pth"))
 
+def save_last_checkpoint(state, filename="checkpoint_last.pth"):
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    torch.save(state, filename)
+
 def save_initial_checkpoint(log_dir, args, model, optimizer, scaler, logger, net_name):
     """
     Saves an initial (random) checkpoint to the specified log directory.
@@ -159,7 +163,7 @@ def save_initial_checkpoint(log_dir, args, model, optimizer, scaler, logger, net
         logger: A logger instance for logging messages.
     """
     # Create the weights directory if it doesn't exist
-    weights_dir = os.path.join(log_dir, "weights", net_name)
+    weights_dir = os.path.join(log_dir, "weights")
     os.makedirs(weights_dir, exist_ok=True)
     
     # Define the path for the initial checkpoint file

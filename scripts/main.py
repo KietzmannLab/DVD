@@ -93,16 +93,17 @@ parser.add_argument(
     metavar="N",
     help="mini-batch size per node. Official SimCLR uses a global batch size of 4096 images.",
 )
+
 parser.add_argument(
     "--lr",
     "--learning-rate",
-    default=0.3,
+    default=1e-4,
     type=float,
     metavar="LR",
     help="initial (base) learning rate",
     dest="lr",
 )
-parser.add_argument('--lr-scheduler', type=str, default='cosine', help='Learning rate scheduler to use')
+parser.add_argument('--lr-scheduler', type=str, default='', help='Learning rate scheduler to use (default None)')
 
 parser.add_argument("--momentum", default=0.9, type=float, metavar="M", help="momentum")
 parser.add_argument(
@@ -137,15 +138,16 @@ parser.add_argument(
     help="""url used to set up
                     distributed training; see https://pytorch.org/docs/stable/distributed.html""",
 )
+
 parser.add_argument(
     "--optimizer",
-    default="lars",
+    default="adam",
     type=str,
-    choices=["lars", "adamw"],
+    choices=["lars", "adamw", "adam"],
     help="optimizer used (default: lars)",
 )
 parser.add_argument(
-    "--warmup-epochs", default=10, type=int, metavar="N", help="number of warmup epochs (default None)"
+    "--warmup-epochs", default=0, type=int, metavar="N", help="number of warmup epochs (default None)"
 )
 parser.add_argument(
     "--save-checkpoint-every-epochs",
@@ -239,7 +241,7 @@ def setup_logging_and_wandb(args):
         log_dir = f'logs/{net_name}'
         os.makedirs(log_dir, exist_ok=True)
 
-        wandb.init(project="early_visual_development", name=net_name, config=vars(args), dir=log_dir)
+        wandb.init(project="final_early_visual_development", name=net_name, config=vars(args), dir=log_dir)
         wandb_run = wandb.run
 
         FileOutputHandler = logging.FileHandler(
@@ -348,8 +350,12 @@ def train(
                 optimizer, epoch + i / iters_per_epoch, args
             )
             learning_rates.update(lr)
-        else:
+        elif args.lr_scheduler == '':
             lr = args.lr
+        else:
+            raise NotImplementedError(
+                f"Development strategy {args.lr_scheduler} not implemented"
+            )
 
         # Get age in months (for EVD transformations)
         age_months = age_months_curve[(epoch - 1) * len(train_loader) + i]
@@ -427,6 +433,9 @@ def main():
     # 2) Create and setup model
     model, linear_keyword = evd.models.loader.create_model(args, logger)
     evd.models.loader.load_pretrained_weights_if_any(args, model, linear_keyword)
+    # Optionally compile the model (PyTorch 2.0+) to speed up training
+    if hasattr(torch, "compile"):
+        model = torch.compile(model)
 
     # 3) Build optimizer and FP16 scaler
     model, optimizer, scaler = evd.models.loader.build_optimizer_and_scaler(args, model)
@@ -434,7 +443,7 @@ def main():
         evd.utils.save_initial_checkpoint(log_dir, args, model, optimizer, scaler, logger, net_name) 
             
     # 4) Possibly resume checkpoint
-    evd.models.loader.resume_checkpoint_if_any(args, model, optimizer, scaler, logger)
+    evd.models.loader.resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir)
 
     # Prepare to log stats if main process
     if evd.utils.is_main_process() and log_dir is not None:
@@ -490,16 +499,21 @@ def main():
             if (epoch + 1) % args.save_checkpoint_every_epochs == 0:
                 filename = f"checkpoint_{epoch}.pth"
 
-            evd.utils.save_checkpoint(
-                {
+            checkpoint_dict = {
                     "epoch": epoch + 1,
                     "arch": args.arch,
                     "state_dict": model.state_dict(),
                     "optimizer": optimizer.state_dict(),
                     "scaler": scaler.state_dict(),
-                },
+                }
+            evd.utils.save_checkpoint(
+                checkpoint_dict,
                 is_best=is_best,
                 filename=os.path.join(log_dir, 'weights', filename),
+            )
+            evd.utils.save_last_checkpoint(
+                checkpoint_dict,
+                filename=os.path.join(log_dir, 'weights', "checkpoint_last.pth"),
             )
 
     if evd.utils.is_main_process():
@@ -508,392 +522,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# def main():
-#     args = parser.parse_args()
-
-#     # setup distributed training
-#     evd.utils.init_distributed_mode(args)
-#     evd.utils.fix_random_seeds(args.seed)
-#     cudnn.benchmark = True
-
-#     #* setup logging library
-#     fileConfig("evd/models/logging/config.ini")
-#     logger = logging.getLogger()
-#     logger.disabled = True
-
-#     net_name = f'{args.arch}_mpe{args.months_per_epoch}_alpha{args.contrast_threshold}_dn{args.decrease_contrast_threshold_spd}_{args.dataset_name}{args.image_size}_{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}_b{args.apply_blur}c{args.apply_color}cs{args.apply_contrast}_T_{args.time_order}_seed_{args.seed}'
-#     wandb_run = None
-    
-
-#     if evd.utils.is_main_process():
-#         wandb.init(project="early_visual_development", config=vars(args))  # You can adjust project name
-#         wandb_run = wandb.run
-
-#         log_dir = f'logs/{net_name}'
-#         os.makedirs(log_dir, exist_ok=True)
-
-#         FileOutputHandler = logging.FileHandler(
-#             os.path.join(log_dir, f"train_gpu={args.gpu}.log")
-#         )
-#         # only the main process is allowed to log
-#         logger.disabled = False
-#         logger.addHandler(FileOutputHandler)
-
-#     logger.info(
-#         "\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items()))
-#     )
-
-#     # create model for training
-#     logger.info("Creating model '{}'".format(args.arch))
-#     if args.arch.startswith("vit"):
-#         model = evd.models.vits.__dict__[args.arch]()
-#         linear_keyword = "head"
-#     else:
-#         model = torchvision_models.__dict__[args.arch]()
-#         linear_keyword = "fc"
-
-#     if args.dataset_name == "texture2shape_miniecoset":
-#         out_dim = 112
-#         # change the last layer
-#         model.fc = nn.Linear(model.fc.in_features, out_dim)
-#     elif args.dataset_name == "ecoset_square256":
-#         out_dim = 565
-#         # change the last layer
-#         model.fc = nn.Linear(model.fc.in_features, out_dim)
-#     else:
-#         raise ValueError(f"dataset_name: {args.dataset_name} not supported")
-
-#     # load from pre-trained, before DistributedDataParallel constructor
-#     if args.pretrained:
-#         if os.path.isfile(args.pretrained):
-#             print("=> loading checkpoint '{}'".format(args.pretrained))
-#             checkpoint = torch.load(args.pretrained, map_location="cpu")
-
-#             state_dict = checkpoint["state_dict"]
-#             for k in list(state_dict.keys()):
-#                 # retain only base_encoder up to before the embedding layer
-#                 if k.startswith("module.encoder") and not k.startswith(
-#                     "module.encoder.%s" % linear_keyword
-#                 ):
-#                     # remove prefix
-#                     state_dict[k[len("module.encoder.") :]] = state_dict[k]
-#                 # delete renamed or unused k
-#                 del state_dict[k]
-
-#             args.start_epoch = 0
-#             msg = model.load_state_dict(state_dict, strict=False)
-#             assert set(msg.missing_keys) == {
-#                 "%s.weight" % linear_keyword,
-#                 "%s.bias" % linear_keyword,
-#             }
-
-#             print("=> loaded pre-trained model '{}'".format(args.pretrained))
-#         else:
-#             print("=> no checkpoint found at '{}'".format(args.pretrained))
-
-#     # infer learning rate before changing batch size
-#     args.lr = args.lr * args.batch_size_per_gpu / 256
-
-#     model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-#     model.cuda()
-
-#     # DistributedDataParallel
-#     model = torch.nn.parallel.DistributedDataParallel(model)
-
-#     # define loss function (criterion) and optimizer
-#     criterion = nn.CrossEntropyLoss().cuda(args.gpu)
-
-#     if args.optimizer == "lars":
-#         optimizer = evd.simclr.optimizer.LARS(
-#             model.parameters(),
-#             args.lr,
-#             weight_decay=args.weight_decay,
-#             momentum=args.momentum,
-#         )
-#     elif args.optimizer == "adamw":
-#         optimizer = torch.optim.AdamW(
-#             model.parameters(), args.lr, weight_decay=args.weight_decay
-#         )
-
-#     scaler = torch.cuda.amp.GradScaler()
-
-#     if evd.utils.is_main_process():
-#         stats_file = open(
-#             os.path.join(log_dir, "stats.txt"), "a", buffering=1
-#         )
-#         logger.info(" ".join(sys.argv))
-#         print(" ".join(sys.argv), file=stats_file)
-#         with open(os.path.join(log_dir, "metadata.txt"), "a") as f:
-#             yaml.dump(args, f, allow_unicode=True)
-#             f.write(str(model))
-
-#     # optionally resume from a checkpoint
-#     if args.resume:
-#         if os.path.isfile(args.resume):
-#             logger.info("Loading checkpoint '{}'".format(args.resume))
-#             if args.gpu is None:
-#                 checkpoint = torch.load(args.resume)
-#             else:
-#                 loc = "cuda:{}".format(args.gpu)
-#                 checkpoint = torch.load(args.resume, map_location=loc)
-#             args.start_epoch = checkpoint["epoch"]
-#             model.load_state_dict(checkpoint["state_dict"])
-#             optimizer.load_state_dict(checkpoint["optimizer"])
-#             scaler.load_state_dict(checkpoint["scaler"])
-#             logger.info(
-#                 "Loaded checkpoint '{}' (epoch {})".format(
-#                     args.resume, checkpoint["epoch"]
-#                 )
-#             )
-#         else:
-#             logger.info("No checkpoint found at '{}'".format(args.resume))
-
-#     dataset_name = args.dataset_name
-#     dataset = SupervisedLearningDataset("/share/klab/datasets")
-#     dataset = dataset.get_dataset(dataset_name)
-#     train_dataset, val_dataset, _ = dataset["train"], dataset["val"], dataset["test"]
-
-#     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-#     val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
-#     print(f"train_sampler: {train_sampler}")
-#     print(f"val_sampler: {val_sampler}")
-
-#     train_loader = torch.utils.data.DataLoader(
-#         train_dataset,
-#         batch_size=args.batch_size_per_gpu,
-#         shuffle=(train_sampler is None),
-#         num_workers=args.workers,
-#         pin_memory=True,
-#         sampler=train_sampler,
-#         drop_last=True,
-#     )
-
-#     val_loader = torch.utils.data.DataLoader(
-#         val_dataset,
-#         batch_size=args.batch_size_per_gpu,
-#         shuffle=None,
-#         num_workers=args.workers,
-#         pin_memory=True,
-#         sampler=val_sampler,
-#         drop_last=True,
-#     )
-
-#     if args.evaluate:
-#         validate(val_loader, model, criterion, args)
-#         return
-
-#     logger.info("Main components ready.")
-#     logger.info(model)
-#     logger.info(f"Optimizer: {optimizer}")
-#     logger.info(f"Scaler: {scaler}")
-#     logger.info("Starting model training.")
-#     best_acc1 = 0
-#     for epoch in range(args.start_epoch, args.epochs):
-#         train_sampler.set_epoch(epoch)
-
-#         # train for one epoch
-#         train(
-#             train_loader,
-#             model,
-#             criterion,
-#             optimizer,
-#             scaler,
-#             wandb_run,  # pass wandb run 
-#             logger,
-#             epoch,
-#             args,
-#             log_dir,
-#         )
-
-#         # evaluate on validation set
-#         acc1 = validate(val_loader, model, criterion, args)
-
-#         # remember best acc@1 and save checkpoint
-#         is_best = acc1 > best_acc1
-#         best_acc1 = max(acc1, best_acc1)
-
-#         if evd.utils.is_main_process():
-#             filename = "checkpoint.pth"
-#             if (epoch + 1) % args.save_checkpoint_every_epochs == 0:
-#                 filename = f"checkpoint_{epoch}.pth"
-
-#             evd.utils.save_checkpoint(
-#                 {
-#                     "epoch": epoch + 1,
-#                     "arch": args.arch,
-#                     "state_dict": model.state_dict(),
-#                     "optimizer": optimizer.state_dict(),
-#                     "scaler": scaler.state_dict(),
-#                 },
-#                 is_best=False,
-#                 filename=os.path.join(log_dir, filename),
-#             )
-
-#     if evd.utils.is_main_process():
-#         wandb.finish()  # Instead of summary_writer.close()
-
-
-# def validate(val_loader, model, criterion, args):
-#     batch_time = evd.utils.AverageMeter("Time", ":6.3f")
-#     losses = evd.utils.AverageMeter("Loss", ":.4e")
-#     top1 = evd.utils.AverageMeter("Acc@1", ":6.2f")
-#     top5 = evd.utils.AverageMeter("Acc@5", ":6.2f")
-#     progress = evd.utils.ProgressMeter(
-#         len(val_loader),
-#         [batch_time, losses, top1, top5],
-#         prefix="Test: ",
-#     )
-
-#     # switch to evaluate mode
-#     model.eval()
-
-#     with torch.no_grad():
-#         end = time.time()
-#         for i, (images, target) in enumerate(val_loader):
-#             if args.gpu is not None:
-#                 images = images.cuda(args.gpu, non_blocking=True)
-#             if torch.cuda.is_available():
-#                 target = target.cuda(args.gpu, non_blocking=True)
-
-#             # compute output
-#             with torch.cuda.amp.autocast(True):
-#                 output = model(images)
-#                 loss = criterion(output, target)
-
-#             # measure accuracy and record loss
-#             acc1, acc5 = evd.utils.accuracy(output, target, topk=(1, 5))
-#             losses.update(loss.item(), images.size(0))
-#             top1.update(acc1[0], images.size(0))
-#             top5.update(acc5[0], images.size(0))
-
-#             # measure elapsed time
-#             batch_time.update(time.time() - end)
-#             end = time.time()
-
-#             if evd.utils.is_main_process() and i % args.log_freq == 0:
-#                 progress.display(i)
-
-#         print(
-#             " * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}".format(
-#                 top1=top1, top5=top5
-#             )
-#         )
-
-#     return top1.avg
-
-
-# def train(train_loader, model, criterion, optimizer, scaler, wandb_run, logger, epoch, args, log_dir):
-#     batch_time = evd.utils.AverageMeter("Time", ":6.3f")
-#     data_time = evd.utils.AverageMeter("Data", ":6.3f")
-#     learning_rates = evd.utils.AverageMeter("LR", ":.4e")
-#     losses = evd.utils.AverageMeter("Loss", ":.4e")
-#     top1 = evd.utils.AverageMeter("Acc@1", ":6.2f")
-#     top5 = evd.utils.AverageMeter("Acc@5", ":6.2f")
-
-#     progress = evd.utils.ProgressMeter(
-#         len(train_loader),
-#         [batch_time, data_time, learning_rates, losses],
-#         prefix="Epoch: [{}]".format(epoch),
-#     )
-
-#     # switch to train mode
-#     model.train()
-
-#     end = time.time()
-#     iters_per_epoch = len(train_loader)
-
-#     # Generate age months curve to map batches to age months for EVD
-#     age_months_curve = evd.evd.development.generate_age_months_curve(
-#         args.epochs,
-#         len(train_loader),
-#         args.months_per_epoch,
-#         mid_phase=(args.time_order == "mid_phase"),
-#         shuffle=(args.time_order == "random"),
-#         seed=args.seed,
-#     )
-
-#     for i, (images, target) in enumerate(train_loader):
-#         # global step
-#         it = len(train_loader) * epoch + i
-
-#         # measure data loading time
-#         data_time.update(time.time() - end)
-
-#         # adjust learning rate
-#         if args.lr_scheduler == 'cosine':
-#             lr = evd.utils.adjust_learning_rate(
-#                 optimizer, epoch + i / iters_per_epoch, args
-#             )
-#             learning_rates.update(lr)
-#         else:
-#             lr = args.lr
-
-#         # Get age in months (for EVD transformations)
-#         age_months = age_months_curve[(epoch - 1) * len(train_loader) + i]
-
-#         if args.gpu is not None:
-#             images = images.cuda(args.gpu, non_blocking=True)
-#         if torch.cuda.is_available():
-#             target = target.cuda(args.gpu, non_blocking=True)
-
-#         # Experience across visual development
-#         if args.development_strategy == "evd":
-#             contrast_control_coeff = max(math.floor(age_months / args.decrease_contrast_threshold_spd) * 2, 1) # need to > 1
-#             images = evd.evd.development.EarlyVisualDevelopmentTransformer().apply_fft_transformations(
-#                 images,
-#                 age_months,
-#                 cs_age50=4.8 * 12,
-#                 contrast_threshold=args.contrast_threshold / contrast_control_coeff,
-#                 image_size=args.image_size,
-#                 verbose=False,
-#             )
-#         elif args.development_strategy == "adult":
-#             pass
-#         else:
-#             raise NotImplementedError(
-#                 f"Development strategy {args.development_strategy} not implemented"
-#             )
-
-#         # compute output
-#         with torch.cuda.amp.autocast(True):
-#             output = model(images)
-#             loss = criterion(output, target)
-
-#         # measure accuracy and record loss
-#         acc1, acc5 = evd.utils.accuracy(output, target, topk=(1, 5))
-#         losses.update(loss.item(), images.size(0))
-#         top1.update(acc1[0], images.size(0))
-#         top5.update(acc5[0], images.size(0))
-
-#         # Log with wandb if main process
-#         if evd.utils.is_main_process() and wandb_run is not None and it % args.log_freq == 0:
-#             wandb.log(
-#                 {
-#                     "train/loss": loss.item(),
-#                     "train/top1": acc1[0].item(),
-#                     "train/top5": acc5[0].item(),
-#                     "lr": lr,
-#                 },
-#                 step=it,
-#             )
-
-#             metrics = progress.display(i)
-#             logger.info(metrics)
-
-#         # compute gradient and do SGD step
-#         optimizer.zero_grad()
-#         scaler.scale(loss).backward()
-#         scaler.step(optimizer)
-#         scaler.update()
-
-#         # measure elapsed time
-#         batch_time.update(time.time() - end)
-#         end = time.time()
-
-#     print(f"Epoch {epoch} time: {batch_time.sum} seconds")
-
-
-# if __name__ == "__main__":
-#     main()
 
