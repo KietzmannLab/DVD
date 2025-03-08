@@ -4,7 +4,7 @@ import wandb
 
 import evd.utils
 
-def validate(val_loader, model, criterion, epoch, args, wandb_run=None, logger=None) :
+def validate(val_loader, model, criterion, epoch, device_id=None, wandb_run=None, logger=None) :
     batch_time = evd.utils.AverageMeter("Time", ":6.3f")
     losses = evd.utils.AverageMeter("Loss", ":.4e")
     top1 = evd.utils.AverageMeter("Acc@1", ":6.2f")
@@ -23,13 +23,19 @@ def validate(val_loader, model, criterion, epoch, args, wandb_run=None, logger=N
     with torch.no_grad():
         end = time.time()
         for i, (images, target) in enumerate(val_loader):
-            if args.gpu is not None:
-                images = images.cuda(args.gpu, non_blocking=True)
+            
+            images = images.cuda(device_id, non_blocking=True) if device_id is not None else (images.cuda(0, non_blocking=True) if torch.cuda.is_available() else images)
             if torch.cuda.is_available():
-                target = target.cuda(args.gpu, non_blocking=True)
+                target = target.cuda(device_id, non_blocking=True)
 
             # compute output
-            with torch.cuda.amp.autocast(True):
+            try:
+                with torch.cuda.amp.autocast(True):
+                    output = model(images)
+                    loss = criterion(output, target)
+            except:
+                if torch.cuda.is_available():
+                    model = model.cuda(device_id)
                 output = model(images)
                 loss = criterion(output, target)
 
@@ -43,7 +49,7 @@ def validate(val_loader, model, criterion, epoch, args, wandb_run=None, logger=N
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if evd.utils.is_main_process() and i % args.log_freq == 0:
+            if evd.utils.is_main_process():
                 progress.display(i)
 
         print(
@@ -66,3 +72,9 @@ def validate(val_loader, model, criterion, epoch, args, wandb_run=None, logger=N
         
 
     return top1.avg, top5.avg
+
+
+
+# Using example from evd_gpus/scripts/analysis.py
+# to call validate(val_loader, model, criterion, epoch, device_id, wandb_run=None, logger=None), need to pass in the following arguments:
+# val_loader, model, criterion, epoch, device_id, wandb_run=None, logger=None

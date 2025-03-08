@@ -14,6 +14,30 @@ from typing import Optional, Dict
 import kornia
 import kornia.augmentation as K
 import kornia.filters as KF
+import evd.utils
+
+def get_test_loaders(args):
+    """
+    Retrieves the requested datasets and wraps them into DataLoaders with distributed sampling.
+    Only returns (loader, sampler) pairs for splits specified in the 'splits' list.
+    """
+    dataset_name = args.dataset_name
+    dataset = SupervisedLearningDataset(args.data)  # Load dataset from path (args.data)
+    dataset = dataset.get_dataset(dataset_name)
+
+    test_sampler = None
+    test_loader = torch.utils.data.DataLoader(
+        dataset["test"],
+        batch_size=args.batch_size_per_gpu,
+        shuffle=False,
+        num_workers=args.workers,
+        pin_memory=True,
+        # sampler=test_sampler,
+        drop_last=True,
+    )
+
+    return test_loader
+
 
 class Ecoset(Dataset):
     """

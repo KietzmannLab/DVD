@@ -1,5 +1,4 @@
 *.egg-info
-playground.py
 slurm_train.py
 slurm_submit_job.sh
 setup_env*s
@@ -8,8 +7,6 @@ h100*
 ./save_dir/
 ./save_dir/*
 .__pycache__/
-all_tnn_runs_jobs
-analysis_all_tnn_jobs
 ./wandb/
 wandb/*
 ./dataset/

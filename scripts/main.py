@@ -80,7 +80,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--start-epoch",
-    default=0,
+    default=1,
     type=int,
     metavar="N",
     help="manual epoch number (useful on restarts)",
@@ -182,7 +182,7 @@ parser.add_argument(
 parser.add_argument(
     "--months-per-epoch",
     default=1,
-    type=int,
+    type=float,
     help="number of months per epoch",
 )
 parser.add_argument(
@@ -194,7 +194,7 @@ parser.add_argument(
 parser.add_argument(
     "--decrease_contrast_threshold_spd",
     default=100,
-    type=int,
+    type=float,
     help="decrease contrast drop speed (default: 100)",
 )
 
@@ -206,6 +206,14 @@ parser.add_argument('--apply_contrast', type=int, default=1, help='Flag to apply
 # additional configs:
 parser.add_argument('--pretrained', default='', type=str,
                     help='path to start from pretrained checkpoint')
+
+# class_weights_json_path
+parser.add_argument(
+    "--class-weights-json-path",
+    default=None,
+    type=str,
+    help="path to class weights json file",
+)
 
 parser.add_argument(
    "--label-smoothing",
@@ -219,11 +227,12 @@ def setup_logging_and_wandb(args):
     Sets up logging and initializes WandB run if main process.
     Returns logger, wandb_run (or None), and log_dir.
     """
-    # Setup logging
+    # Initialize distributed training
     evd.utils.init_distributed_mode(args)
     evd.utils.fix_random_seeds(args.seed)
     cudnn.benchmark = True
 
+    # Setup logging
     fileConfig("evd/models/logging/config.ini")
     logger = logging.getLogger()
     logger.disabled = True  # Will enable if main process
@@ -357,7 +366,7 @@ def train(
                 f"Development strategy {args.lr_scheduler} not implemented"
             )
 
-        # Get age in months (for EVD transformations)
+        # Get age in months (for EVD transformations) | epoch start from 1 so -1
         age_months = age_months_curve[(epoch - 1) * len(train_loader) + i]
 
         if args.gpu is not None:
@@ -429,6 +438,8 @@ def main():
 
     # 1) Setup logging, distributed, and wandb
     logger, wandb_run, log_dir, net_name = setup_logging_and_wandb(args)
+    if evd.utils.is_main_process() and log_dir is not None:
+        evd.utils.save_config(args, os.path.join(log_dir, f"config.yaml")) # Saving config setup
 
     # 2) Create and setup model
     model, linear_keyword = evd.models.loader.create_model(args, logger)
@@ -443,7 +454,8 @@ def main():
         evd.utils.save_initial_checkpoint(log_dir, args, model, optimizer, scaler, logger, net_name) 
             
     # 4) Possibly resume checkpoint
-    evd.models.loader.resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir)
+    if evd.utils.is_main_process() and log_dir is not None:
+        evd.models.loader.resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir)
 
     # Prepare to log stats if main process
     if evd.utils.is_main_process() and log_dir is not None:
@@ -454,14 +466,12 @@ def main():
             yaml.dump(args, f, allow_unicode=True)
             f.write(str(model))
         
-
-
     # 5) Get data loaders
     train_loader, val_loader, train_sampler, val_sampler = get_data_loaders(args)
 
     # 6) Optionally only evaluate
     if args.evaluate:
-        validate(val_loader, model, nn.CrossEntropyLoss().cuda(args.gpu), args)
+        evd.models.eval.validate(val_loader, model, criterion, epoch, args.gpu)
         return
 
     logger.info("Main components ready.")
@@ -471,9 +481,12 @@ def main():
     logger.info("Starting model training.")
 
     best_acc1 = 0
-    criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing).cuda(args.gpu)
+    try:
+        criterion = evd.utils.get_loss_function(args)
+    except:
+        criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing).cuda(args.gpu)
 
-    for epoch in range(args.start_epoch, args.epochs):
+    for epoch in range(args.start_epoch, args.epochs +1):
         train_sampler.set_epoch(epoch)
 
         # train for one epoch
@@ -490,7 +503,7 @@ def main():
         )
 
         # evaluate on validation set
-        acc1, _ = evd.models.eval.validate(val_loader, model, criterion, epoch, args, wandb_run, logger)
+        acc1, _ = evd.models.eval.validate(val_loader, model, criterion, epoch, args.gpu, wandb_run, logger)
         is_best = acc1 > best_acc1
         best_acc1 = max(acc1, best_acc1)
 
@@ -500,7 +513,7 @@ def main():
                 filename = f"checkpoint_{epoch}.pth"
 
             checkpoint_dict = {
-                    "epoch": epoch + 1,
+                    "epoch": epoch,
                     "arch": args.arch,
                     "state_dict": model.state_dict(),
                     "optimizer": optimizer.state_dict(),

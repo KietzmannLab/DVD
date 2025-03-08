@@ -40,7 +40,7 @@ time_order_val    = ["normal", "random", 'mid_phase'][0:1]
 n_months_list = [300][:1]
 
 #* Sweepable parameters for EVD
-months_per_epochs = [2, 1, 4, 3, 0.5, 8, 0.25][-4:]
+months_per_epochs = [1, 2, 4, 3, 8, 0.5, 0.25][1:5]
 contrast_thresh = [0.2, 0.1, 0.4][:3]
 contrast_spd    = [100, 50, 150][:3]
 

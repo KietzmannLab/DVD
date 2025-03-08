@@ -10,7 +10,7 @@
 #! How many cpus will be required?
 #SBATCH -c 10 #TODO
 #! Which partition? klab-gpu klab-l40s gpu
-#SBATCH -p gpu
+#SBATCH -p klab-gpu
 #! How many whole nodes should be allocated?
 #SBATCH --nodes 1  # Number of reaquested nodes 
 #! Note probably this should not exceed the total number of GPUs in use.
