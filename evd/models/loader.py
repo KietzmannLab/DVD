@@ -38,6 +38,20 @@ def create_model(args, logger=None):
     return model, linear_keyword
 
 
+def remove_prefix(state_dict):
+    """Strip the DataParallel prefix from state dict keys if it exists."""
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        if k.startswith("module._orig_mod."):
+            new_key = k[len("module._orig_mod."):]
+        #     # new_key = k[:len("module.")]+k[len("module._orig_mod."):]
+        elif k.startswith("module."):
+            new_key = k[len("module."):]
+        else:
+            new_key = k
+        new_state_dict[new_key] = v
+    return new_state_dict
+    
 def load_pretrained_weights_if_any(args, model, linear_keyword):
     """
     Loads pretrained weights into model if args.pretrained is specified.
@@ -47,7 +61,7 @@ def load_pretrained_weights_if_any(args, model, linear_keyword):
             print("=> loading checkpoint '{}'".format(args.pretrained))
             checkpoint = torch.load(args.pretrained, map_location="cpu")
 
-            state_dict = checkpoint["state_dict"]
+            state_dict = remove_prefix(checkpoint["state_dict"])
             for k in list(state_dict.keys()):
                 # retain only base_encoder up to before the embedding layer
                 if k.startswith("module.encoder") and not k.startswith(
@@ -100,6 +114,8 @@ def build_optimizer_and_scaler(args, model):
     return model, optimizer, scaler
 
 
+
+
 def resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir):
     """
     Resumes from checkpoint if args.resume is provided.
@@ -114,7 +130,7 @@ def resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir):
                 loc = "cuda:{}".format(args.gpu)
                 checkpoint = torch.load(args.resume, map_location=loc)
             args.start_epoch = checkpoint["epoch"]
-            model.load_state_dict(checkpoint["state_dict"])
+            model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
             optimizer.load_state_dict(checkpoint["optimizer"])
             scaler.load_state_dict(checkpoint["scaler"])
             logger.info(
@@ -129,24 +145,13 @@ def resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir):
         # Case 2: No --resume given, or file not found => search automatically
         resume_latest_checkpoint(args, model, optimizer, scaler, logger, log_dir)
 
+
 def load_checkpoint(model, optimizer=None, model_path=None, log_dir=None, args=None):
     """
     Load a checkpoint from a specified model path or from a default log directory.
     This version removes any "module." or "module._orig_mod." prefixes from the state dict,
     which can appear if the model was saved using DataParallel.
     """
-    def remove_prefix(state_dict):
-        """Strip the DataParallel prefix from state dict keys if it exists."""
-        new_state_dict = {}
-        for k, v in state_dict.items():
-            if k.startswith("module._orig_mod."):
-                new_key = k[len("module._orig_mod."):]
-            elif k.startswith("module."):
-                new_key = k[len("module."):]
-            else:
-                new_key = k
-            new_state_dict[new_key] = v
-        return new_state_dict
 
     # Choose the checkpoint source: model_path takes precedence.
     if model_path and os.path.isfile(model_path):
@@ -170,12 +175,14 @@ def load_checkpoint(model, optimizer=None, model_path=None, log_dir=None, args=N
             model.load_state_dict(state_dict, strict=True)
             if optimizer and "optimizer" in checkpoint:
                 optimizer.load_state_dict(checkpoint["optimizer"])
+            if 'best_acc1' in checkpoint:
+                args.best_acc1 = checkpoint['best_acc1']
+                print(f"Loaded best_acc1: {args.best_acc1}")
         else:
             raise ValueError("No checkpoint found at '{}'".format(default_checkpoint))
     else:
         raise ValueError("No checkpoint found at '{}'".format(model_path))
     
-   
 
 def resume_latest_checkpoint(args, model, optimizer, scaler, logger, log_dir):
     """
@@ -188,6 +195,7 @@ def resume_latest_checkpoint(args, model, optimizer, scaler, logger, log_dir):
     
     If no valid checkpoint is found, logs an informational message and starts from scratch.
     """
+    
     weights_dir = os.path.join(log_dir, "weights")
     if not os.path.exists(weights_dir):
         logger.info(f"No 'weights' directory found at {weights_dir}; starting from scratch.")
@@ -199,10 +207,12 @@ def resume_latest_checkpoint(args, model, optimizer, scaler, logger, log_dir):
         logger.info(f"Found 'checkpoint_last.pth' at '{last_checkpoint_path}', loading that.")
         loc = f"cuda:{args.gpu}" if args.gpu is not None else None
         checkpoint = torch.load(last_checkpoint_path, map_location=loc)
-        model.load_state_dict(checkpoint["state_dict"])
+        model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
         optimizer.load_state_dict(checkpoint["optimizer"])
         scaler.load_state_dict(checkpoint["scaler"])
         args.start_epoch = checkpoint["epoch"]
+        if "best_acc1" in checkpoint:
+            args.best_acc1 = checkpoint["best_acc1"]    
         logger.info(f"Successfully loaded 'checkpoint_last.pth' (epoch {checkpoint['epoch']}).")
         return
 
@@ -244,7 +254,7 @@ def resume_latest_checkpoint(args, model, optimizer, scaler, logger, log_dir):
     loc = f"cuda:{args.gpu}" if args.gpu is not None else None
     checkpoint = torch.load(checkpoint_path, map_location=loc)
     args.start_epoch = checkpoint["epoch"]
-    model.load_state_dict(checkpoint["state_dict"])
+    model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
     optimizer.load_state_dict(checkpoint["optimizer"])
     scaler.load_state_dict(checkpoint["scaler"])
     logger.info(f"Successfully loaded checkpoint '{checkpoint_path}' (epoch {checkpoint['epoch']}).")

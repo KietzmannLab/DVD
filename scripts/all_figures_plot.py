@@ -1,0 +1,2 @@
+resnet50_mpe3.0_alpha0.4_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1
+resnet50_mpe3.0_alpha0.4_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1

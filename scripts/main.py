@@ -222,6 +222,10 @@ parser.add_argument(
     help="Label smoothing to apply in cross-entropy loss (default: 0.0)",
 )
 
+# best_acc1
+parser.add_argument("--best-acc1", default=0.0, type=float,
+                    help="Best accuracy achieved so far")
+
 def setup_logging_and_wandb(args):
     """
     Sets up logging and initializes WandB run if main process.
@@ -480,7 +484,7 @@ def main():
     logger.info(f"Scaler: {scaler}")
     logger.info("Starting model training.")
 
-    best_acc1 = 0
+    best_acc1 = args.best_acc1
     try:
         criterion = evd.utils.get_loss_function(args)
     except:

@@ -356,3 +356,10 @@ def calculate_class_weights_from_imagefolder(dataset):
 
     # Convert to a tensor for use in PyTorch
     return torch.tensor(class_weights, dtype=torch.float)
+
+
+def move_optimizer_state_to_device(optimizer, device):
+    for state in optimizer.state.values():
+        for key, value in state.items():
+            if isinstance(value, torch.Tensor):
+                state[key] = value.to(device)

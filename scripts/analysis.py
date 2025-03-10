@@ -30,7 +30,8 @@ PLOT_ACC_ROBUSTNESS = 0
 ############################################################################################################
 ## Set the parameters for the shape bias evaluation
 ############################################################################################################
-analysis_id = '7th_Fri_best_v4_'#'27th_Thu1_Feb_' #!
+EPOCHS = ['best'] #* '' means use the path directly, otherwise use the epoch number or 'best'
+analysis_id = f'9th_Sun_{EPOCHS[0]}_extra_'#'27th_Thu1_Feb_' #!
 save_dir_name = 'blur_sharpness'
 plot_dir = f'./results/plots/'
 dataset_id = 1
@@ -40,7 +41,6 @@ DATASET_TRAINED_ON_Path = ['/home/student/l/lzejin/datasets/', '/home/student/l/
 NUM_CLASSES = [112,565,16,118][dataset_id]
 DATASET_ANLYSIS_ON = ['cue-conflict'][:] #* Evaluation
 IMAGE_SIZE = 149
-EPOCHS = ['best'] #* '' means use the path directly, otherwise use the epoch number or 'best'
 model_type = ['resnet50', 'blt_vs'][0]
 
 # Hyperparameters for EVD
@@ -53,8 +53,8 @@ contrast_spd    = [100.0, 50.0, 150.0][:0] # Beta for contrast
 MODEL_NAME2PATH = {
     # mini ecoset
     # 'adult':f"/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe2.0_alpha0.2_dn100.0_texture2shape_miniecoset256_0.0001_dev_adult_b1c1cs1_T_normal_seed_1/weights/checkpoint_{EPOCHS[0]}.pth",
-    'full_ecoset_evd_mpe1_alpha0.1_dn100':f'/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe1.0_alpha0.1_dn100.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1/weights/checkpoint_149.pth',#_{EPOCHS[0]}.pth',
-    'full_ecoset_evd_mpe1_alpha0.1_dn50':f'/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe1.0_alpha0.1_dn50.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1/weights/checkpoint_149.pth',#_{EPOCHS[0]}.pth',
+    # 'full_ecoset_evd_mpe1_alpha0.1_dn100':f'/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe1.0_alpha0.1_dn100.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1/weights/checkpoint_149.pth',#_{EPOCHS[0]}.pth',
+    # 'full_ecoset_evd_mpe1_alpha0.1_dn50':f'/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe1.0_alpha0.1_dn50.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1/weights/checkpoint_149.pth',#_{EPOCHS[0]}.pth',
     # 'full_ecoset_evd_mpe2_alpha0.1_dn100' :f"/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe2.0_alpha0.1_dn100.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1/weights/checkpoint_{EPOCHS[0]}.pth",
     # 'full_ecoset_evd_mpe2_alpha0.2_dn100':f'/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe2.0_alpha0.2_dn100.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1/weights/checkpoint_124.pth',#_{EPOCHS[0]}.pth',
     # 'full_ecoset_evd_mpe2_alpha0.2_dn50':f'/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe2.0_alpha0.2_dn50.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1/weights/checkpoint_124.pth',#_{EPOCHS[0]}.pth',
@@ -63,10 +63,32 @@ MODEL_NAME2PATH = {
     # 'full_ecoset_evd_mpe3_alpha0.4_dn150':f'/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe3.0_alpha0.4_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1/weights/checkpoint_139.pth',#_{EPOCHS[0]}.pth',
     # 'full_ecoset_evd_mpe4_alpha0.4_dn150':f'/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe4.0_alpha0.4_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1/weights/checkpoint_{EPOCHS[0]}.pth',
     # 'full_ecoset_evd_mpe4_alpha0.4_dn50':f'/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe4.0_alpha0.4_dn50.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1/weights/checkpoint_{EPOCHS[0]}.pth',
-    'full_ecoset_evd_mpe8_alpha0.4_dn150':f'/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe8.0_alpha0.4_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1/weights/checkpoint_{EPOCHS[0]}.pth',
+    # 'full_ecoset_evd_mpe8_alpha0.4_dn150':f'/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe8.0_alpha0.4_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1/weights/checkpoint_{EPOCHS[0]}.pth',
     # 'full_ecoset_adult' :f"/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/resnet50_mpe2.0_alpha0.2_dn100.0_ecoset_square256256_0.0001_dev_adult_b1c1cs1_T_normal_seed_1/weights/checkpoint_{EPOCHS[0]}.pth",
 
+    # 'full_ecoset_mpe3.0_alpha0.4_dn150':'resnet50_mpe3.0_alpha0.4_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    # 'full_ecoset_mpe2.0_alpha0.2_dn50': 'resnet50_mpe2.0_alpha0.2_dn50.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    #! adult 63% + 0.45 shape bias, good acc model 63%+ 0.7 shape bias (boom), good trade-off 57-60% acc 0.8 shape bias, good shape bias model 53%-ish acc 0.88+ shape bias
+    #TODO high acc models looks fine (mpe 4 -8 -3), mpe 2 dn 300 & 100 looks fine (somehow test is 3-5% lower than val), 150 need further train, dn50 might need retrain, mpe1 alpha 0.05-dn50 & alpha 0.1-dn100 on trainning, while alpha 0.1-dn50 need retrain (dn100 wait to see)
+    #* p1 full_ecoset_evd_mpe2_alpha0.2_dn50, full_ecoset_evd_mpe1_alpha0.1_dn50
+    # p2 full_ecoset_evd_mpe2_alpha0.1_dn100, full_ecoset_evd_mpe1_alpha0.05_dn50
+    # p3 full_ecoset_evd_mpe2_alpha0.2_dn300, full_ecoset_evd_mpe1_alpha0.05 or 0.1 _dn300, so for mpe 4/8 alpha 0.4 dn 300
+    # p4 mpe8 alpha 0.8 dn50 (higher acc higher shape bias)
+    #TODO then dn300 seems fine? accuracy is even higher by without mapping in full ecoset, 
+    #* fixed epoch 1 error | ideally shpae bias should be higher
+    #! so retrain the model mpe2 alpha0.1 dn100 | 'full_ecoset_mpe1.0_alpha0.1_dn50', 'full_ecoset_mpe2.0_alpha0.1_dn100', 'full_ecoset_mpe8.0_alpha0.4_dn150', 'full_ecoset_mpe8.0_alpha0.8_dn150'
+    # 'full_ecoset_mpe8.0_alpha0.4_dn150': 'resnet50_mpe8.0_alpha0.4_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    # 'full_ecoset_mpe4.0_alpha0.4_dn50': 'resnet50_mpe4.0_alpha0.4_dn50.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    # 'full_ecoset_mpe4.0_alpha0.4_dn150': 'resnet50_mpe4.0_alpha0.4_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    # 'full_ecoset_mpe3.0_alpha0.4_dn50':'resnet50_mpe3.0_alpha0.4_dn50.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    # 'full_ecoset_mpe2.0_alpha0.2_dn100':'resnet50_mpe2.0_alpha0.2_dn100.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    # 'full_ecoset_mpe2.0_alpha0.2_dn300': 'resnet50_mpe2.0_alpha0.2_dn300.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    # 'full_ecoset_mpe1.0_alpha0.1_dn50':'resnet50_mpe1.0_alpha0.1_dn50.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    # 'full_ecoset_mpe1.0_alpha0.1_dn100':'resnet50_mpe1.0_alpha0.1_dn100.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    # 'full_ecoset_adult' : 'resnet50_mpe2.0_alpha0.2_dn100.0_ecoset_square256256_0.0001_dev_adult_b1c1cs1_T_normal_seed_1',
     }
+# Convert into REAL PATH
+MODEL_NAME2PATH = {model_name: f"/home/student/l/lzejin/codebase/All-TNNs/evd_gpus/logs/{model_path}/weights/checkpoint_{EPOCHS[0]}.pth" for model_name, model_path in MODEL_NAME2PATH.items()}
 
 # Option 2: tarverse hyperparameters to include trade-off models
 for mpe, alpha, beta in product(months_per_epochs, contrast_thresh, contrast_spd):
