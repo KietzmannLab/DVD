@@ -43,13 +43,16 @@ After installation, you can import ```evd.evd.development``` to generate the dev
 ### Hyperparameter Choices
 
 You can adjust the key EVD hyperparameters:
+
 	•	--months-per-epoch: Determines how many simulated “months” elapse in each training epoch.
 	•	--contrast_threshold: Sets the baseline contrast threshold for image transformations.
 	•	--decrease_contrast_threshold_spd: Controls how rapidly the effective contrast threshold changes (e.g., to simulate increasing visual acuity over time).
 
+
 Below is a simple dictionary of recommended presets for different goals:
 
     ```
+    
     # --months-per-epoch --contrast_threshold --decrease_contrast_threshold_spd
     params = {
         'adult': None,                              # No early visual development
