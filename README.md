@@ -48,6 +48,7 @@ You can adjust the key EVD hyperparameters:
 	•	--decrease_contrast_threshold_spd: Controls how rapidly the effective contrast threshold changes (e.g., to simulate increasing visual acuity over time).
 
 Below is a simple dictionary of recommended presets for different goals:
+
     ```
     # --months-per-epoch --contrast_threshold --decrease_contrast_threshold_spd
     params = {
@@ -56,7 +57,9 @@ Below is a simple dictionary of recommended presets for different goals:
         'good_acc_model': [4, 0.4, 150],            # Higher baseline accuracy
         'good_tradeoff_model': [2, 0.2, 50],        # Balanced tradeoff
     }
+
     ```
+
 
 ### A minimal training function might look like this:
 
