@@ -40,8 +40,26 @@ After installation, you can import ```evd.evd.development``` to generate the dev
 
 	2. Apply an EVD-based transformation (e.g., blurring, color changes, contrast adjustments) based on the current month.
 
+### Hyperparameter Choices
 
-A minimal training function might look like this:
+You can adjust the key EVD hyperparameters:
+	•	--months-per-epoch: Determines how many simulated “months” elapse in each training epoch.
+	•	--contrast_threshold: Sets the baseline contrast threshold for image transformations.
+	•	--decrease_contrast_threshold_spd: Controls how rapidly the effective contrast threshold changes (e.g., to simulate increasing visual acuity over time).
+
+Below is a simple dictionary of recommended presets for different goals:
+    ```
+    # --months-per-epoch --contrast_threshold --decrease_contrast_threshold_spd
+    params = {
+        'adult': None,                              # No early visual development
+        'good_shape_bias_model': [1, 0.1, 50],      # Favored shape bias
+        'good_acc_model': [4, 0.4, 150],            # Higher baseline accuracy
+        'good_tradeoff_model': [2, 0.2, 50],        # Balanced tradeoff
+    }
+    ```
+
+### A minimal training function might look like this:
+
     
     ```python
     import math
@@ -120,7 +138,7 @@ Data Augmentation Pipelines
 You can either:
 
 	- Use the default supervised pipeline transform from: evd.datasets.dataset_loader.SupervisedLearningDataset.get_supervised_pipeline_transform
-    
+
 	- Or write your own data augmentation transforms that best suit your experimental setup.
 
 
