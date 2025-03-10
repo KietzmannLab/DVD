@@ -34,11 +34,15 @@ This repository provides code and utilities for simulating early visual developm
 
 ## Training your own model with early visual experience
 
-After installation, you can import evd.evd.development to generate the developmental transformations. In your training loop, you will:
-	1.	Generate an age-months curve that maps each training batch to a specific “month” in the simulated development.
-	2.	Apply an EVD-based transformation (e.g., blurring, color changes, contrast adjustments) based on the current month.
+After installation, you can import ```evd.evd.development``` to generate the developmental transformations. In your training loop, you will:
+
+	1. Generate an age-months curve that maps each training batch to a specific “month” in the simulated development.
+
+	2. Apply an EVD-based transformation (e.g., blurring, color changes, contrast adjustments) based on the current month.
+    
 
 A minimal training function might look like this:
+    
     ```
     import math
     import evd.evd.development
@@ -114,19 +118,17 @@ A minimal training function might look like this:
 Data Augmentation Pipelines
 
 You can either:
-	•	Use the default supervised pipeline transform from: evd.datasets.dataset_loader.SupervisedLearningDataset.get_supervised_pipeline_transform
-	•	Or write your own data augmentation transforms that best suit your experimental setup.
+	- Use the default supervised pipeline transform from: evd.datasets.dataset_loader.SupervisedLearningDataset.get_supervised_pipeline_transform
+	- Or write your own data augmentation transforms that best suit your experimental setup.
 
-⸻
 
-Citation
+---
+
+## Citation
 
 If you use this repository or find it helpful in your research, please cite it accordingly : XXX.
 
-
-⸻
-
-License
+## License
 
 This project is licensed under the MIT License. Please see the LICENSE file for details.
 
