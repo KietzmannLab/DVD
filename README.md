@@ -26,12 +26,13 @@ This repository provides code and utilities for simulating early visual developm
 
     ```
     In this example:
-    | 💡 If --development-strategy is set to anything other than evd, the parameters --months-per-epoch, --time-order, --contrast_threshold, and --decrease_contrast_threshold_spd are not required and will be ignored.
     
-	•	--development-strategy evd enables early visual development transformations.
+	- --development-strategy evd enables early visual development transformations.
 
-	•	--months-per-epoch 2 sets how many “virtual months” of development each epoch simulates.
+	- --months-per-epoch 2 sets how many “virtual months” of development each epoch simulates.
 
-	•	--time-order normal applies development changes in a typical forward chronological order.
-    
-	•	Other parameters control model architecture, data settings, etc.
+	- --time-order normal applies development changes in a typical forward chronological order.
+
+	- Other parameters control model architecture, data settings, etc.
+
+    - 💡 If --development-strategy is set to anything other than 'evd', the parameters --months-per-epoch, --time-order, --contrast_threshold, and --decrease_contrast_threshold_spd are not required and will be ignored.
