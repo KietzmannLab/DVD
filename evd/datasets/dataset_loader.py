@@ -22,7 +22,7 @@ def get_test_loaders(args):
     Only returns (loader, sampler) pairs for splits specified in the 'splits' list.
     """
     dataset_name = args.dataset_name
-    dataset = SupervisedLearningDataset(args.data)  # Load dataset from path (args.data)
+    dataset = SupervisedLearningDataset(args.data, args)  # Load dataset from path (args.data) & also parse all
     dataset = dataset.get_dataset(dataset_name)
 
     test_sampler = None
@@ -122,6 +122,7 @@ class ContrastiveLearningDataset:
             #* Now set the same as supervised learning
             aug_list.append(K.RandomHorizontalFlip(p=0.25))
             aug_list.append(K.RandomRotation(degrees=15.0, p=0.25))
+            # if args.grayscale_aug:
             aug_list.append(K.RandomGrayscale(p=0.5))
             aug_list.append(K.RandomBrightness(brightness=(0.8, 1.2), p=0.5))
             aug_list.append(K.RandomEqualize(p=0.5))
@@ -163,7 +164,7 @@ class ContrastiveLearningDataset:
         """
         Example: texture2shape_miniecoset dataset, referencing the .h5 path as in your original code.
         """
-        image_size = self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size =  256 #self.hyp.get('dataset', {}).get('image_size', 256)
         dataset_path = f"{self.root_folder}/texture2shape_miniecoset_{image_size}px.h5" 
         print(f"[INFO] Loading texture2shape_miniecoset dataset from {dataset_path}")
 
@@ -185,7 +186,7 @@ class ContrastiveLearningDataset:
         """
         Example: Ecoset with 256x256 images
         """
-        image_size = self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size = 256 # self.hyp.get('dataset', {}).get('image_size', 256)
         dataset_path = f"{self.root_folder}/ecoset_square{image_size}_proper_chunks.h5"
         print(f"[INFO] Loading ecoset_square256 dataset from {dataset_path}")
 
@@ -204,7 +205,7 @@ class ContrastiveLearningDataset:
         """
         Example: Ecoset patches
         """
-        image_size = self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
         dataset_path = f"{self.root_folder}/optimized_datasets/megacoset.h5"
         print(f"[INFO] Loading ecoset_square256_patches dataset from {dataset_path}")
 
@@ -225,7 +226,7 @@ class ContrastiveLearningDataset:
         Here, we demonstrate a simple approach: rely on torchvision's ImageNet if available,
         or a custom approach. For demonstration, we use a placeholder.
         """
-        image_size = self.hyp.get('dataset', {}).get('image_size', 224)
+        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 224)
         print("[INFO] Loading ImageNet dataset (placeholder).")
 
         simclr_transform = self.get_simclr_pipeline_transform()
@@ -248,7 +249,7 @@ class ContrastiveLearningDataset:
         In your original code, you have an HDF5 with 'train', 'val', 'test' splits.
         We show a simplified single-split usage here.
         """
-        image_size = self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
         dataset_file = f"{self.root_folder}/facescrub_256px.h5"
         print(f"[INFO] Loading facescrub dataset from {dataset_file}")
 
@@ -344,11 +345,20 @@ class SupervisedLearningDataset:
         # 1) Convert images to float [0,1]
         aug_list.append(torchvision.transforms.ConvertImageDtype(torch.float))
 
+        try:
+            if self.hyp.resize_to_224:
+                print("Resize to 224x224")
+                aug_list.append(K.Resize((224, 224)))
+        except:
+            print("Fail to resize to 224x224")
+            pass
+
         if train:
             # Typical augmentations for training
             aug_list.append(K.RandomHorizontalFlip(p=0.25))
             aug_list.append(K.RandomRotation(degrees=15.0, p=0.25))
-            aug_list.append(K.RandomGrayscale(p=0.5))
+            if self.hyp.grayscale_aug:
+                aug_list.append(K.RandomGrayscale(p=0.5))
             aug_list.append(K.RandomBrightness(brightness=(0.8, 1.2), p=0.5))
             aug_list.append(K.RandomEqualize(p=0.5))
             aug_list.append(K.RandomPerspective(distortion_scale=0.5, p=0.5))
@@ -394,7 +404,7 @@ class SupervisedLearningDataset:
         Example: texture2shape_miniecoset dataset using an .h5 file
         with train/val/test splits.
         """
-        image_size = self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
         dataset_path = f"{self.root_folder}/texture2shape_miniecoset_{image_size}px.h5" 
         print(f"[INFO] Loading texture2shape_miniecoset dataset from {dataset_path}")
 
@@ -433,7 +443,7 @@ class SupervisedLearningDataset:
         """
         Example: Ecoset with 256x256 images
         """
-        image_size = self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
         dataset_path = f"{self.root_folder}/ecoset_square{image_size}_proper_chunks.h5"
         print(f"[INFO] Loading ecoset_square256 dataset from {dataset_path}")
 
@@ -470,7 +480,7 @@ class SupervisedLearningDataset:
         """
         Example: Ecoset patches
         """
-        image_size = self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
         dataset_path = f"{self.root_folder}/optimized_datasets/megacoset.h5"
         print(f"[INFO] Loading ecoset_square256_patches dataset from {dataset_path}")
 
@@ -508,7 +518,7 @@ class SupervisedLearningDataset:
         Example: ImageNet. For demonstration, we use torchvision's
         datasets.FakeData as a placeholder.
         """
-        image_size = self.hyp.get('dataset', {}).get('image_size', 224)
+        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 224)
         print("[INFO] Loading ImageNet dataset (placeholder).")
 
         train_transform = self.get_supervised_pipeline_transform(train=True)
@@ -551,7 +561,7 @@ class SupervisedLearningDataset:
         Example: FaceScrub dataset usage from an HDF5 file with 
         train/val/test splits.
         """
-        image_size = self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
         dataset_file = f"{self.root_folder}/facescrub_{image_size}px.h5"
         print(f"[INFO] Loading facescrub dataset from {dataset_file}")
 

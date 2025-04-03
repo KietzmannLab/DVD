@@ -80,7 +80,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--start-epoch",
-    default=1,
+    default=0,
     type=int,
     metavar="N",
     help="manual epoch number (useful on restarts)",
@@ -222,6 +222,22 @@ parser.add_argument(
     help="Label smoothing to apply in cross-entropy loss (default: 0.0)",
 )
 
+# resize to 224
+parser.add_argument(
+    "--resize_to_224",
+    default=0,
+    type=int,
+    help="Resize images to 224x224",
+) # args.resize_to_224
+
+# no grayscale
+parser.add_argument(
+    "--grayscale-aug",
+    default=1,
+    type=int,
+    help="apply grayscale transformation",
+) # args.grayscale_aug
+
 # best_acc1
 parser.add_argument("--best-acc1", default=0.0, type=float,
                     help="Best accuracy achieved so far")
@@ -234,20 +250,26 @@ def setup_logging_and_wandb(args):
     # Initialize distributed training
     evd.utils.init_distributed_mode(args)
     evd.utils.fix_random_seeds(args.seed)
-    cudnn.benchmark = True
+    # If you really want bit-for-bit reproducibility (slower), enable:
+    # cudnn.deterministic = True
+    cudnn.benchmark = True # find the best algorithm to use for your hardware, but it can introduce some variability
 
     # Setup logging
     fileConfig("evd/models/logging/config.ini")
     logger = logging.getLogger()
     logger.disabled = True  # Will enable if main process
 
-    net_name = (
-        f'{args.arch}_mpe{args.months_per_epoch}_alpha{args.contrast_threshold}'
-        f'_dn{args.decrease_contrast_threshold_spd}_{args.dataset_name}'
-        f'{args.image_size}_{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}'
-        f'_b{args.apply_blur}c{args.apply_color}cs{args.apply_contrast}'
-        f'_T_{args.time_order}_seed_{args.seed}'
-    )
+    if args.development_strategy == 'evd':
+        net_name = (
+            f'{args.arch}_mpe{args.months_per_epoch}_alpha{args.contrast_threshold}'
+            f'_dn{args.decrease_contrast_threshold_spd}_{args.dataset_name}'
+            f'{args.image_size}_{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}'
+            f'_b{args.apply_blur}c{args.apply_color}cs{args.apply_contrast}'
+            f'_T_{args.time_order}_seed_{args.seed}'
+        ) 
+    else:
+        net_name = f'{args.arch}_{args.dataset_name}_{args.image_size}_{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}_seed_{args.seed}'
+    
     wandb_run = None
 
     if evd.utils.is_main_process():
@@ -277,7 +299,7 @@ def get_data_loaders(args):
     with distributed sampling.
     """
     dataset_name = args.dataset_name
-    dataset = SupervisedLearningDataset(args.data) # Load dataset from path (args.data)
+    dataset = SupervisedLearningDataset(args.data, args) # Load dataset from path (args.data) & all
     dataset = dataset.get_dataset(dataset_name)
     train_dataset, val_dataset, _ = dataset["train"], dataset["val"], dataset["test"]
 
@@ -371,7 +393,8 @@ def train(
             )
 
         # Get age in months (for EVD transformations) | epoch start from 1 so -1
-        age_months = age_months_curve[(epoch - 1) * len(train_loader) + i]
+        age_months = age_months_curve[(epoch -0) * len(train_loader) + i]
+        
 
         if args.gpu is not None:
             images = images.cuda(args.gpu, non_blocking=True)
@@ -490,7 +513,7 @@ def main():
     except:
         criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing).cuda(args.gpu)
 
-    for epoch in range(args.start_epoch, args.epochs +1):
+    for epoch in range(args.start_epoch, args.epochs):
         train_sampler.set_epoch(epoch)
 
         # train for one epoch
@@ -539,4 +562,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

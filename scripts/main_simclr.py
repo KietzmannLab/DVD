@@ -107,6 +107,7 @@ parser.add_argument(
     help="weight decay (default: 1e-6)",
     dest="weight_decay",
 )
+
 parser.add_argument(
     "-p",
     "--log-freq",
@@ -175,20 +176,12 @@ parser.add_argument(
     help="number of nodes for distributed training",
 )
 
-# Extra for EVD
-# --development-strategy evd --months-per-epoch 1 --time-order normal  --image-size 256
-# --contrast_drop_speed_factor 0.05 --decrease_contrast_drop_speed_factor_every_n_month 36 --decrease_speed_of_contrast_drop_speed_factor_every_n_month 2 
+# Setting for development strategy
 parser.add_argument('--development-strategy',
                     default='adult', 
                     type=str, 
-                    help='development strategy (default: evd)')
-
-parser.add_argument(
-    "--months-per-epoch",
-    default=1,
-    type=int,
-    help="number of months per epoch",
-)
+                    help='development strategy (default: evd)',
+                    )
 parser.add_argument(
     "--time-order",
     default="normal",
@@ -197,23 +190,63 @@ parser.add_argument(
     help="time order of the batches",
 )
 parser.add_argument(
-    "--contrast_drop_speed_factor",
+    "--months-per-epoch",
+    default=1,
+    type=float,
+    help="number of months per epoch",
+)
+parser.add_argument(
+    "--contrast_threshold",
     default=0.05,
     type=float,
     help="contrast drop speed factor (default: 0.05)",
 )
 parser.add_argument(
-    "--decrease_contrast_drop_speed_factor_every_n_month",
-    default=36,
-    type=int,
-    help="decrease contrast drop speed factor every n month (default: 36)",
+    "--decrease_contrast_threshold_spd",
+    default=100,
+    type=float,
+    help="decrease contrast drop speed (default: 100)",
 )
+
+# Ablations
+parser.add_argument('--apply_blur', type=int, default=1, help='Flag to apply blur to images')
+parser.add_argument('--apply_color', type=int, default=1, help='Flag to apply color changes')
+parser.add_argument('--apply_contrast', type=int, default=1, help='Flag to apply contrast adjustments')
+
+# additional configs:
+parser.add_argument('--pretrained', default='', type=str,
+                    help='path to start from pretrained checkpoint')
+
+# class_weights_json_path
 parser.add_argument(
-    "--decrease_speed_of_contrast_drop_speed_factor_every_n_month",
-    default=2,
-    type=int,
-    help="decrease speed of contrast drop speed factor every n month (default: 2)",
+    "--class-weights-json-path",
+    default=None,
+    type=str,
+    help="path to class weights json file",
 )
+
+parser.add_argument(
+   "--label-smoothing",
+    default=0.0,
+    type=float,
+    help="Label smoothing to apply in cross-entropy loss (default: 0.0)",
+)
+
+# resize to 224
+parser.add_argument(
+    "--resize_to_224",
+    default=0,
+    type=int,
+    help="Resize images to 224x224",
+) # args.resize_to_224
+
+# no grayscale
+parser.add_argument(
+    "--grayscale-aug",
+    default=1,
+    type=int,
+    help="apply grayscale transformation",
+) # args.grayscale_aug
 
 parser.add_argument('--image-size', type=int, default=256)
 
@@ -226,7 +259,7 @@ def main():
     cudnn.benchmark = True
 
     #* setup logging library
-    fileConfig("evd/simclr/logging/config.ini")
+    fileConfig("/home/student/l/lzejin/codebase/All-TNNs/P001_evd_gpus/evd/models/logging/config.ini")
     logger = logging.getLogger()
     logger.disabled = True
 
@@ -438,13 +471,18 @@ def train(train_loader, model, optimizer, scaler, summary_writer, logger, epoch,
 
         # Experience across visual development
         if args.development_strategy == 'evd':
-            decrease_contrast_drop_speed_factor_every_n_month = args.decrease_contrast_drop_speed_factor_every_n_month
-            decrease_speed_of_contrast_drop_speed_factor_every_n_month = args.decrease_speed_of_contrast_drop_speed_factor_every_n_month
-            contrast_control_coeff = math.floor(age_months / decrease_contrast_drop_speed_factor_every_n_month)* decrease_speed_of_contrast_drop_speed_factor_every_n_month #* 0*2, 1*2,
-            contrast_control_coeff = max(contrast_control_coeff, 1) # need to larget than 1
+            contrast_control_coeff = max(math.floor(age_months / args.decrease_contrast_threshold_spd) * 2, 1)
+            images = evd.evd.development.EarlyVisualDevelopmentTransformer().apply_fft_transformations(
+                images,
+                age_months,
+                apply_blur=args.apply_blur, 
+                apply_color=args.apply_color, 
+                apply_contrast=args.apply_contrast,
+                contrast_threshold=args.contrast_threshold / contrast_control_coeff,
+                image_size=args.image_size,
+                verbose=False,
+            )
 
-            images = evd.evd.development.EarlyVisualDevelopmentTransformer().apply_fft_transformations(images, age_months, cs_age50= 4.8*12, contrast_drop_speed_factor = args.contrast_drop_speed_factor/contrast_control_coeff, image_size=args.image_size, verbose=False)
-            
             images[0] = images[0].cuda(args.gpu, non_blocking=True)
             images[1] = images[1].cuda(args.gpu, non_blocking=True)
 

@@ -16,8 +16,8 @@ def find_free_port():
 
 # Submission settings
 submit_script = "scripts/submit_task_from_array.sh"  # The SLURM array script
-cfg = f"./logs/slurm_logs/tmp-cfg-{int(time())}.txt"           # Temporary file to hold commands
-nparallel = 8                               # Max number of concurrent tasks in the array
+cfg = f"./logs/slurm_logs_v2/tmp-cfg-{int(time())}.txt"           # Temporary file to hold commands
+nparallel = 5                               # Max number of concurrent tasks in the array
 
 # Example of parameter sweeps (simplify or expand as you need)
 seeds       = [1, 2, 3, 4, 5][:1]        # e.g., keep only the first for demonstration
@@ -40,9 +40,9 @@ time_order_val    = ["normal", "random", 'mid_phase'][0:1]
 n_months_list = [300][:1]
 
 #* Sweepable parameters for EVD
-months_per_epochs = [1, 2, 4, 3, 8, 0.5, 0.25][1:5]
-contrast_thresh = [0.2, 0.1, 0.4][:3]
-contrast_spd    = [100, 50, 150][:3]
+months_per_epochs = [1, 2, 4, 8, 0.5, 3, 0.25][:4]
+contrast_thresh = [0.8, 0.4, 0.2, 0.1, 0.05, ][:1]
+contrast_spd    = [ 50, 150, 300, 100][:2]
 
 # Ablation flags
 apply_blur_flags = [1][:1]
@@ -57,12 +57,12 @@ with open(cfg, "w") as f:
         # Each job needs its own free port to avoid collision:
         host_port = find_free_port()
 
-        epochs = max(int(n_months / months_per_epoch), 150) # at least 150 ep
+        epochs = 300 #max(int(n_months / months_per_epoch), 300) # at least 300 ep
 
         # Build the entire torchrun command for each set of params:
         cmd = [
             "torchrun",
-            "--nproc_per_node=1",          # 2 processes per node (2 GPUs)
+            "--nproc_per_node=2",          #* 2 processes per node (2 GPUs) or 1 process per node (1 GPU)
             "--nnodes=1",                  # single node
             "--node_rank=0",               # node rank
             f"--master_addr=localhost",

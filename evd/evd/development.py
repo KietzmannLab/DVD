@@ -215,9 +215,9 @@ def generate_age_months_curve(total_epochs, len_train_loader, months_per_epoch, 
     """
     age_months_curve = []
     
-    for epoch in range(1, total_epochs + 1):
+    for epoch in range(0, total_epochs):
         for batch_id in range(len_train_loader):
-            age_month = (epoch - 1) * months_per_epoch + batch_id * months_per_epoch / len_train_loader
+            age_month = (epoch - 0) * months_per_epoch + batch_id * months_per_epoch / len_train_loader
             age_months_curve.append(age_month)
 
     if mid_phase:

@@ -16,8 +16,9 @@ def create_model(args, logger=None):
     if logger:
         logger.info("Creating model '{}'".format(args.arch))
         
-    if args.arch.startswith("vit"):
-        model = evd.models.vits.__dict__[args.arch]()
+    if args.arch.startswith("vit") or 'transformer' in args.arch:
+        # model = evd.models.vits.__dict__[args.arch]()
+        model = torchvision_models.__dict__[args.arch]()
         linear_keyword = "head"
     else:
         model = torchvision_models.__dict__[args.arch]()
@@ -25,17 +26,33 @@ def create_model(args, logger=None):
 
     if args.dataset_name == "texture2shape_miniecoset":
         out_dim = 112
-        # change the last layer
-        model.fc = nn.Linear(model.fc.in_features, out_dim)
-    elif args.dataset_name == "ecoset_square256":
+        model = change_last_layer(args, model, out_dim)
+
+    elif args.dataset_name in ["ecoset_square256", "ecoset_square256_patches"]:
         out_dim = 565
-        model.fc = nn.Linear(model.fc.in_features, out_dim)
+        model = change_last_layer(args, model, out_dim)
     elif args.dataset_name == "imagenet":
-        pass
+        out_dim = 1000
+        model = change_last_layer(args, model, out_dim)
     else:
         raise ValueError(f"dataset_name: {args.dataset_name} not supported")
 
     return model, linear_keyword
+
+# change the last layer
+def change_last_layer(args, model, out_dim):
+    """
+    Changes the last layer of the model based on the dataset_name.
+    """
+    if args.arch.startswith("resnet") or 'resnext' in args.arch:
+        model.fc = nn.Linear(model.fc.in_features, out_dim)
+    elif args.arch.startswith("alexnet") or args.arch.startswith("vgg"):
+        model.classifier[6] = nn.Linear(model.classifier[6].in_features, out_dim)
+    elif args.arch.startswith("vit") or 'transformer' in args.arch:
+        model.head = nn.Linear(model.head.in_features, out_dim)
+    else:
+        raise ValueError(f"arch: {args.arch} not supported")
+    return model
 
 
 def remove_prefix(state_dict):
@@ -61,7 +78,10 @@ def load_pretrained_weights_if_any(args, model, linear_keyword):
             print("=> loading checkpoint '{}'".format(args.pretrained))
             checkpoint = torch.load(args.pretrained, map_location="cpu")
 
-            state_dict = remove_prefix(checkpoint["state_dict"])
+            try:
+                model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
+            except:
+                model.load_state_dict(checkpoint["state_dict"])
             for k in list(state_dict.keys()):
                 # retain only base_encoder up to before the embedding layer
                 if k.startswith("module.encoder") and not k.startswith(
@@ -130,7 +150,10 @@ def resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir):
                 loc = "cuda:{}".format(args.gpu)
                 checkpoint = torch.load(args.resume, map_location=loc)
             args.start_epoch = checkpoint["epoch"]
-            model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
+            try:
+                model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
+            except:
+                model.load_state_dict(checkpoint["state_dict"])
             optimizer.load_state_dict(checkpoint["optimizer"])
             scaler.load_state_dict(checkpoint["scaler"])
             logger.info(
@@ -159,7 +182,10 @@ def load_checkpoint(model, optimizer=None, model_path=None, log_dir=None, args=N
         loc = "cuda:{}".format(args.gpu) if args else ('cuda' if torch.cuda.is_available() else 'cpu')
         checkpoint = torch.load(model_path, map_location=loc)
         # Remove unwanted prefixes from keys.
-        state_dict = remove_prefix(checkpoint["state_dict"])
+        try:
+            model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
+        except:
+            model.load_state_dict(checkpoint["state_dict"])
         model.load_state_dict(state_dict, strict=True)
         if optimizer and "optimizer" in checkpoint:
             optimizer.load_state_dict(checkpoint["optimizer"])
@@ -171,7 +197,10 @@ def load_checkpoint(model, optimizer=None, model_path=None, log_dir=None, args=N
         if os.path.isfile(default_checkpoint):
             loc = "cuda:{}".format(args.gpu) if args else ('cuda' if torch.cuda.is_available() else 'cpu')
             checkpoint = torch.load(default_checkpoint, map_location=loc)
-            state_dict = remove_prefix(checkpoint["state_dict"])
+            try:
+                model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
+            except:
+                model.load_state_dict(checkpoint["state_dict"])
             model.load_state_dict(state_dict, strict=True)
             if optimizer and "optimizer" in checkpoint:
                 optimizer.load_state_dict(checkpoint["optimizer"])
@@ -207,7 +236,10 @@ def resume_latest_checkpoint(args, model, optimizer, scaler, logger, log_dir):
         logger.info(f"Found 'checkpoint_last.pth' at '{last_checkpoint_path}', loading that.")
         loc = f"cuda:{args.gpu}" if args.gpu is not None else None
         checkpoint = torch.load(last_checkpoint_path, map_location=loc)
-        model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
+        try:
+            model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
+        except:
+            model.load_state_dict(checkpoint["state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer"])
         scaler.load_state_dict(checkpoint["scaler"])
         args.start_epoch = checkpoint["epoch"]
@@ -254,7 +286,10 @@ def resume_latest_checkpoint(args, model, optimizer, scaler, logger, log_dir):
     loc = f"cuda:{args.gpu}" if args.gpu is not None else None
     checkpoint = torch.load(checkpoint_path, map_location=loc)
     args.start_epoch = checkpoint["epoch"]
-    model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
+    try:
+        model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
+    except:
+        model.load_state_dict(checkpoint["state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer"])
     scaler.load_state_dict(checkpoint["scaler"])
     logger.info(f"Successfully loaded checkpoint '{checkpoint_path}' (epoch {checkpoint['epoch']}).")

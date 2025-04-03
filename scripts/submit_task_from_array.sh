@@ -4,13 +4,13 @@
 #! Name of the job:
 #SBTACH --job-name H100-test
 #! Specify the number of GPUs per node (between 1 and n; must be n if nodes>1).
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 #! How much wmemory will be required?
-#SBATCH --mem 130G #600G # #!TODO cannot be too large, the whole cluster only has 2T --> analysis ecoset, we need to be large
+#SBATCH --mem 200G #600G # #!TODO cannot be too large, the whole cluster only has 2T --> analysis ecoset, we need to be large
 #! How many cpus will be required?
-#SBATCH -c 10 #TODO
+#SBATCH -c 20 #TODO
 #! Which partition? klab-gpu klab-l40s gpu
-#SBATCH -p klab-gpu
+#SBATCH -p gpu
 #! How many whole nodes should be allocated?
 #SBATCH --nodes 1  # Number of reaquested nodes 
 #! Note probably this should not exceed the total number of GPUs in use.
@@ -18,8 +18,8 @@
 ##SBATCH --ntasks-per-node=1          # Number of tasks per node (e.g., GPUs per node)
 
 #! error and output file?
-#SBATCH --error=./logs/slurm_logs/h100_multi_error.o%j
-#SBATCH --output=./logs/slurm_logs/h100_multi_output.o%j
+#SBATCH --error=./logs/slurm_logs_v2/h100_multi_error.o%j
+#SBATCH --output=./logs/slurm_logs_v2/h100_multi_output.o%j
 #! What types of email messages do you wish to receive?
 #SBATCH --mail-user=lzejin@uni-osnabrueck.de
 ##SBATCH --mail-type=BEGIN

@@ -33,3 +33,4 @@ logs/*
 *__pycache__*
 checkpoint_best.pth
 blurring4texture2shape1file.git
+./scripts/early_visual_development_train
