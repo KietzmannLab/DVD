@@ -86,201 +86,6 @@ class Ecoset(Dataset):
         return img, label
 
 
-class BaseException(Exception):
-    """Base exception"""
-
-class InvalidDatasetSelection(BaseException):
-    """Raised when the choice of dataset is invalid."""
-
-class ContrastiveLearningDataset:
-    """
-    A rewrite of your original dataset selection logic in the style of
-    the ContrastiveLearningDataset used in SimCLR-like frameworks.
-    """
-
-    def __init__(self, root_folder, n_views, hyp=None):
-        """
-        :param root_folder: Base path to your datasets
-        :param hyp: A dictionary of hyperparameters/configs
-        :param n_views: Number of augmented views to generate (default=2 for standard contrastive learning)
-        """
-        self.root_folder = root_folder
-        self.hyp = hyp if hyp is not None else {}
-        self.n_views = n_views
-    
-    def get_simclr_pipeline_transform(train=True, hyp=None, normalize_type='0-1'):
-        """
-        Build a Kornia augmentation pipeline as an nn.Module.
-        All transforms will run on GPU if the input tensor is on GPU.
-        """
-        aug_list = []
-
-        # ADD to float, need to be done before Kornia transforms
-        aug_list.append(torchvision.transforms.ConvertImageDtype(torch.float))
-
-        if train:
-            #* Now set the same as supervised learning
-            aug_list.append(K.RandomHorizontalFlip(p=0.25))
-            aug_list.append(K.RandomRotation(degrees=15.0, p=0.25))
-            # if args.grayscale_aug:
-            aug_list.append(K.RandomGrayscale(p=0.5))
-            aug_list.append(K.RandomBrightness(brightness=(0.8, 1.2), p=0.5))
-            aug_list.append(K.RandomEqualize(p=0.5))
-            aug_list.append(K.RandomPerspective(distortion_scale=0.5, p=0.5))
-            aug_list.append(K.RandomSharpness(p=0.5))
-            aug_list.append(K.RandomGaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0), p=0.5))
-
-        # Build the final pipeline
-        augmentations = nn.Sequential(*aug_list)
-
-        return KorniaTransform(augmentations, normalize_type, hyp)
-
-    def get_dataset(self, dataset_name):
-        """
-        Creates and returns the dataset object corresponding to `dataset_name`.
-        This uses ContrastiveLearningViewGenerator to replace TwoCropsTransform.
-        You can add logic for train/val/test splits, etc., as needed.
-        """
-        # A dictionary to map dataset names to the corresponding creation logic:
-        valid_datasets = {
-            'texture2shape_miniecoset': self._get_texture2shape_miniecoset,
-            'ecoset_square256': self._get_ecoset_square256,
-            'ecoset_square256_patches': self._get_ecoset_square256_patches,
-            'imagenet': self._get_imagenet,
-            'facescrub': self._get_facescrub,
-            'stl10': self._get_stl10
-        }
-
-        if dataset_name not in valid_datasets:
-            raise InvalidDatasetSelection(f"Dataset {dataset_name} not supported.")
-
-        return valid_datasets[dataset_name]()
-
-    # ------------------------------------------------
-    # Below are example helper methods for each dataset
-    # ------------------------------------------------
-
-    def _get_texture2shape_miniecoset(self):
-        """
-        Example: texture2shape_miniecoset dataset, referencing the .h5 path as in your original code.
-        """
-        image_size =  256 #self.hyp.get('dataset', {}).get('image_size', 256)
-        dataset_path = f"{self.root_folder}/texture2shape_miniecoset_{image_size}px.h5" 
-        print(f"[INFO] Loading texture2shape_miniecoset dataset from {dataset_path}")
-
-        # If doing self-supervised, we replace TwoCropsTransform with ContrastiveLearningViewGenerator:
-        simclr_transform = self.get_simclr_pipeline_transform()
-        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
-
-        # For simplicity, just return the 'train' portion. 
-        # Extend this logic for 'val'/'test' as needed.
-        dataset = Ecoset(
-            split='train',
-            dataset_path=dataset_path,
-            transform=contrastive_transform,
-            in_memory=True  # or False, as you prefer
-        )
-        return dataset
-
-    def _get_ecoset_square256(self):
-        """
-        Example: Ecoset with 256x256 images
-        """
-        image_size = 256 # self.hyp.get('dataset', {}).get('image_size', 256)
-        dataset_path = f"{self.root_folder}/ecoset_square{image_size}_proper_chunks.h5"
-        print(f"[INFO] Loading ecoset_square256 dataset from {dataset_path}")
-
-        simclr_transform = self.get_simclr_pipeline_transform()
-        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
-
-        dataset = Ecoset(
-            split='train',
-            dataset_path=dataset_path,
-            transform=contrastive_transform,
-            in_memory=False
-        )
-        return dataset
-
-    def _get_ecoset_square256_patches(self):
-        """
-        Example: Ecoset patches
-        """
-        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
-        dataset_path = f"{self.root_folder}/optimized_datasets/megacoset.h5"
-        print(f"[INFO] Loading ecoset_square256_patches dataset from {dataset_path}")
-
-        simclr_transform = self.get_simclr_pipeline_transform()
-        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
-
-        dataset = Ecoset(
-            split='train',
-            dataset_path=dataset_path,
-            transform=contrastive_transform,
-            in_memory=False
-        )
-        return dataset
-
-    def _get_imagenet(self):
-        """
-        Example: ImageNet. 
-        Here, we demonstrate a simple approach: rely on torchvision's ImageNet if available,
-        or a custom approach. For demonstration, we use a placeholder.
-        """
-        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 224)
-        print("[INFO] Loading ImageNet dataset (placeholder).")
-
-        simclr_transform = self.get_simclr_pipeline_transform()
-        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
-
-        # For real usage with ImageNet, you might do:
-        # return datasets.ImageNet(self.root_folder, split='train', transform=contrastive_transform)
-        # or use a custom data loader.
-
-        return datasets.FakeData(
-            size=1000,  # Example
-            image_size=(3, image_size, image_size),
-            num_classes=1000,
-            transform=contrastive_transform
-        )
-
-    def _get_facescrub(self):
-        """
-        Example: FaceScrub dataset usage.
-        In your original code, you have an HDF5 with 'train', 'val', 'test' splits.
-        We show a simplified single-split usage here.
-        """
-        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
-        dataset_file = f"{self.root_folder}/facescrub_256px.h5"
-        print(f"[INFO] Loading facescrub dataset from {dataset_file}")
-
-        simclr_transform = self.get_simclr_pipeline_transform()
-        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
-
-        # If you created a custom FaceScrub class similar to Ecoset:
-        return Ecoset(
-            split='train',
-            dataset_path=dataset_file,
-            transform=contrastive_transform,
-            in_memory=True
-        )
-
-    def _get_stl10(self):
-        """
-        Example: STL10 in an unlabeled split, as is common in self-supervised learning.
-        """
-        print("[INFO] Loading STL10 dataset (unlabeled split).")
-        simclr_transform = self.get_simclr_pipeline_transform()
-        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
-
-        dataset = datasets.STL10(
-            root=self.root_folder,
-            split='train',  # often used for SSL
-            download=True,
-            transform=contrastive_transform
-        )
-        return dataset
-
-
 class KorniaTransform(nn.Module):
     def __init__(self, aug_pipe, normalize_type, hyp):
         super().__init__()
@@ -633,6 +438,199 @@ class SupervisedLearningDataset:
             'test': test_dataset
         }
 
+class BaseException(Exception):
+    """Base exception"""
+
+class InvalidDatasetSelection(BaseException):
+    """Raised when the choice of dataset is invalid."""
+
+class ContrastiveLearningDataset:
+    """
+    A rewrite of your original dataset selection logic in the style of
+    the ContrastiveLearningDataset used in SimCLR-like frameworks.
+    """
+
+    def __init__(self, root_folder, n_views, hyp=None):
+        """
+        :param root_folder: Base path to your datasets
+        :param hyp: A dictionary of hyperparameters/configs
+        :param n_views: Number of augmented views to generate (default=2 for standard contrastive learning)
+        """
+        self.root_folder = root_folder
+        self.hyp = hyp if hyp is not None else {}
+        self.n_views = n_views
+    
+    def get_simclr_pipeline_transform(train=True, hyp=None, normalize_type='0-1'):
+        """
+        Build a Kornia augmentation pipeline as an nn.Module.
+        All transforms will run on GPU if the input tensor is on GPU.
+        """
+        aug_list = []
+
+        # ADD to float, need to be done before Kornia transforms
+        aug_list.append(torchvision.transforms.ConvertImageDtype(torch.float))
+
+        if train:
+            #* Now set the same as supervised learning
+            aug_list.append(K.RandomHorizontalFlip(p=0.25))
+            aug_list.append(K.RandomRotation(degrees=15.0, p=0.25))
+            # if args.grayscale_aug:
+            aug_list.append(K.RandomGrayscale(p=0.5))
+            aug_list.append(K.RandomBrightness(brightness=(0.8, 1.2), p=0.5))
+            aug_list.append(K.RandomEqualize(p=0.5))
+            aug_list.append(K.RandomPerspective(distortion_scale=0.5, p=0.5))
+            aug_list.append(K.RandomSharpness(p=0.5))
+            aug_list.append(K.RandomGaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0), p=0.5))
+
+        # Build the final pipeline
+        augmentations = nn.Sequential(*aug_list)
+
+        return KorniaTransform(augmentations, normalize_type, hyp)
+
+    def get_dataset(self, dataset_name):
+        """
+        Creates and returns the dataset object corresponding to `dataset_name`.
+        This uses ContrastiveLearningViewGenerator to replace TwoCropsTransform.
+        You can add logic for train/val/test splits, etc., as needed.
+        """
+        # A dictionary to map dataset names to the corresponding creation logic:
+        valid_datasets = {
+            'texture2shape_miniecoset': self._get_texture2shape_miniecoset,
+            'ecoset_square256': self._get_ecoset_square256,
+            'ecoset_square256_patches': self._get_ecoset_square256_patches,
+            'imagenet': self._get_imagenet,
+            'facescrub': self._get_facescrub,
+            'stl10': self._get_stl10
+        }
+
+        if dataset_name not in valid_datasets:
+            raise InvalidDatasetSelection(f"Dataset {dataset_name} not supported.")
+
+        return valid_datasets[dataset_name]()
+
+    # ------------------------------------------------
+    # Below are example helper methods for each dataset
+    # ------------------------------------------------
+
+    def _get_texture2shape_miniecoset(self):
+        """
+        Example: texture2shape_miniecoset dataset, referencing the .h5 path as in your original code.
+        """
+        image_size =  256 #self.hyp.get('dataset', {}).get('image_size', 256)
+        dataset_path = f"{self.root_folder}/texture2shape_miniecoset_{image_size}px.h5" 
+        print(f"[INFO] Loading texture2shape_miniecoset dataset from {dataset_path}")
+
+        # If doing self-supervised, we replace TwoCropsTransform with ContrastiveLearningViewGenerator:
+        simclr_transform = self.get_simclr_pipeline_transform()
+        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
+
+        # For simplicity, just return the 'train' portion. 
+        # Extend this logic for 'val'/'test' as needed.
+        dataset = Ecoset(
+            split='train',
+            dataset_path=dataset_path,
+            transform=contrastive_transform,
+            in_memory=True  # or False, as you prefer
+        )
+        return dataset
+
+    def _get_ecoset_square256(self):
+        """
+        Example: Ecoset with 256x256 images
+        """
+        image_size = 256 # self.hyp.get('dataset', {}).get('image_size', 256)
+        dataset_path = f"{self.root_folder}/ecoset_square{image_size}_proper_chunks.h5"
+        print(f"[INFO] Loading ecoset_square256 dataset from {dataset_path}")
+
+        simclr_transform = self.get_simclr_pipeline_transform()
+        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
+
+        dataset = Ecoset(
+            split='train',
+            dataset_path=dataset_path,
+            transform=contrastive_transform,
+            in_memory=False
+        )
+        return dataset
+
+    def _get_ecoset_square256_patches(self):
+        """
+        Example: Ecoset patches
+        """
+        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
+        dataset_path = f"{self.root_folder}/optimized_datasets/megacoset.h5"
+        print(f"[INFO] Loading ecoset_square256_patches dataset from {dataset_path}")
+
+        simclr_transform = self.get_simclr_pipeline_transform()
+        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
+
+        dataset = Ecoset(
+            split='train',
+            dataset_path=dataset_path,
+            transform=contrastive_transform,
+            in_memory=False
+        )
+        return dataset
+
+    def _get_imagenet(self):
+        """
+        Example: ImageNet. 
+        Here, we demonstrate a simple approach: rely on torchvision's ImageNet if available,
+        or a custom approach. For demonstration, we use a placeholder.
+        """
+        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 224)
+        print("[INFO] Loading ImageNet dataset (placeholder).")
+
+        simclr_transform = self.get_simclr_pipeline_transform()
+        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
+
+        # For real usage with ImageNet, you might do:
+        # return datasets.ImageNet(self.root_folder, split='train', transform=contrastive_transform)
+        # or use a custom data loader.
+
+        return datasets.FakeData(
+            size=1000,  # Example
+            image_size=(3, image_size, image_size),
+            num_classes=1000,
+            transform=contrastive_transform
+        )
+
+    def _get_facescrub(self):
+        """
+        Example: FaceScrub dataset usage.
+        In your original code, you have an HDF5 with 'train', 'val', 'test' splits.
+        We show a simplified single-split usage here.
+        """
+        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
+        dataset_file = f"{self.root_folder}/facescrub_256px.h5"
+        print(f"[INFO] Loading facescrub dataset from {dataset_file}")
+
+        simclr_transform = self.get_simclr_pipeline_transform()
+        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
+
+        # If you created a custom FaceScrub class similar to Ecoset:
+        return Ecoset(
+            split='train',
+            dataset_path=dataset_file,
+            transform=contrastive_transform,
+            in_memory=True
+        )
+
+    def _get_stl10(self):
+        """
+        Example: STL10 in an unlabeled split, as is common in self-supervised learning.
+        """
+        print("[INFO] Loading STL10 dataset (unlabeled split).")
+        simclr_transform = self.get_simclr_pipeline_transform()
+        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
+
+        dataset = datasets.STL10(
+            root=self.root_folder,
+            split='train',  # often used for SSL
+            download=True,
+            transform=contrastive_transform
+        )
+        return dataset
 
 # ----------------------------------------------------------------
 # Example usage:
