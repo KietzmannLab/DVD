@@ -180,13 +180,14 @@ def load_checkpoint(model, optimizer=None, model_path=None, log_dir=None, args=N
     if model_path and os.path.isfile(model_path):
         print("Loading checkpoint '{}'".format(model_path))
         loc = "cuda:{}".format(args.gpu) if args else ('cuda' if torch.cuda.is_available() else 'cpu')
+
         checkpoint = torch.load(model_path, map_location=loc)
+        # import pdb;pdb.set_trace()
         # Remove unwanted prefixes from keys.
         try:
             model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
         except:
             model.load_state_dict(checkpoint["state_dict"])
-        model.load_state_dict(state_dict, strict=True)
         if optimizer and "optimizer" in checkpoint:
             optimizer.load_state_dict(checkpoint["optimizer"])
 

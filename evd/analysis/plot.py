@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import scienceplots
@@ -53,6 +54,60 @@ def plot_shape_bias_across_time(csv_path, colors = ['orange', 'black', 'blue', '
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300)
 
+
+
+def bar_plot(values, tick_labels, x_label, y_label, title, save_path, figsize=(3.54, 2)):
+    """
+    Creates and saves a bar plot.
+    
+    Args:
+        values (list or np.array): The heights of the bars.
+        tick_labels (list): Labels for the x-ticks.
+        x_label (str): Label for the x-axis.
+        y_label (str): Label for the y-axis.
+        title (str): Title of the plot.
+        save_path (str): File path (without extension) to save the plot.
+        figsize (tuple): Figure size in inches.
+    """
+    plt.figure(figsize=figsize)
+    x = np.arange(len(values))
+    plt.bar(x, values)
+    plt.xticks(x, tick_labels, rotation=45)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.tight_layout()
+    if title:
+        plt.title(title)
+    if save_path:
+        plt.savefig(save_path + ".png")
+        plt.close()
+
+
+def curve_plot(values, tick_labels, x_label='x', y_label='y', title=None, save_path=None, figsize=(3.54, 2)):
+    """
+    Creates and saves a curve (line) plot.
+    
+    Args:
+        values (list or np.array): y-values of the curve.
+        tick_labels (list): Labels for the x-ticks.
+        x_label (str): Label for the x-axis.
+        y_label (str): Label for the y-axis.
+        title (str, optional): Title of the plot.
+        save_path (str, optional): File path (without extension) to save the plot.
+        figsize (tuple): Figure size in inches.
+    """
+    plt.figure(figsize=figsize)
+    x = np.arange(len(values))
+    plt.plot(x, values, marker='o', linestyle='-')
+    plt.xticks(x, tick_labels, rotation=45)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.tight_layout()
+    if title:
+        plt.title(title)
+    if save_path:
+        plt.savefig(save_path + ".png")
+        plt.close()
 
 
 if __name__ == "__main__":

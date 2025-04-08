@@ -162,8 +162,8 @@ class SupervisedLearningDataset:
             # Typical augmentations for training
             aug_list.append(K.RandomHorizontalFlip(p=0.25))
             aug_list.append(K.RandomRotation(degrees=15.0, p=0.25))
-            if self.hyp.grayscale_aug:
-                aug_list.append(K.RandomGrayscale(p=0.5))
+            # if self.hyp.grayscale_aug:
+            aug_list.append(K.RandomGrayscale(p=0.5))
             aug_list.append(K.RandomBrightness(brightness=(0.8, 1.2), p=0.5))
             aug_list.append(K.RandomEqualize(p=0.5))
             aug_list.append(K.RandomPerspective(distortion_scale=0.5, p=0.5))
@@ -324,41 +324,28 @@ class SupervisedLearningDataset:
         datasets.FakeData as a placeholder.
         """
         image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 224)
-        print("[INFO] Loading ImageNet dataset (placeholder).")
+        imagenet_path= "/share/klab/datasets/imagenet/"
+        print(f"[INFO] Loading ImageNet dataset ({imagenet_path}).")
 
         train_transform = self.get_supervised_pipeline_transform(train=True)
-        val_transform   = self.get_supervised_pipeline_transform(train=False)
-        test_transform  = self.get_supervised_pipeline_transform(train=False)
+        val_test_transform   = self.get_supervised_pipeline_transform(train=False)
 
-        # In real usage, do:
-        # train_dataset = datasets.ImageNet(root=self.root_folder, split='train', transform=train_transform)
-        # val_dataset   = datasets.ImageNet(root=self.root_folder, split='val', transform=val_transform)
-        # test_dataset  = ... # Possibly the same as val or a separate test set
+        from evd.datasets.imagenet.imagenet import load_imagenet
+        imagenet_path= "/share/klab/datasets/imagenet/"
 
-        # For demonstration with FakeData:
-        train_dataset = datasets.FakeData(
-            size=5000,
-            image_size=(3, image_size, image_size),
-            num_classes=1000,
-            transform=train_transform
-        )
-        val_dataset = datasets.FakeData(
-            size=1000,
-            image_size=(3, image_size, image_size),
-            num_classes=1000,
-            transform=val_transform
-        )
-        test_dataset = datasets.FakeData(
-            size=1000,
-            image_size=(3, image_size, image_size),
-            num_classes=1000,
-            transform=test_transform
+        train_dataset, train_sampler, val_dataset = load_imagenet(imagenet_path=imagenet_path,
+                                                    batch_size=self.hyp.batch_size_per_gpu,
+                                                    distributed = True,
+                                                    workers = self.hyp.workers,
+                                                    train_transforms = train_transform,
+                                                    test_transforms= val_test_transform,
+                                                    # normalization = False, # Not setting norm here
         )
 
         return {
             'train': train_dataset,
             'val': val_dataset,
-            'test': test_dataset
+            'test': None
         }
 
     def _get_facescrub(self) -> Dict[str, torch.utils.data.Dataset]:

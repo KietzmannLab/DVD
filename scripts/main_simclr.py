@@ -259,7 +259,7 @@ def main():
     cudnn.benchmark = True
 
     #* setup logging library
-    fileConfig("/home/student/l/lzejin/codebase/All-TNNs/P001_evd_gpus/evd/models/logging/config.ini")
+    fileConfig("evd/models/logging/config.ini")
     logger = logging.getLogger()
     logger.disabled = True
 
