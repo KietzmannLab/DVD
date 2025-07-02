@@ -315,7 +315,7 @@ def resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir):
         resume_latest_checkpoint(args, model, optimizer, scaler, logger, log_dir)
 
 
-def load_checkpoint(model, optimizer=None, model_path=None, log_dir=None, args=None):
+def load_checkpoint(model, model_path=None, optimizer=None, log_dir=None, args=None):
     """
     Load a checkpoint from a specified model path or from a default log directory.
     This version removes any "module." or "module._orig_mod." prefixes from the state dict,
@@ -439,6 +439,4 @@ def resume_latest_checkpoint(args, model, optimizer, scaler, logger, log_dir):
         model.load_state_dict(checkpoint["state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer"])
     scaler.load_state_dict(checkpoint["scaler"])
-    logger.info(f"Successfully loaded checkpoint '{checkpoint_path}' (epoch {checkpoint['epoch']}).")
-
-
+    logger.info(f"Successfully loaded checkpoint '{checkpoint_path}' (epoch {checkpoint[

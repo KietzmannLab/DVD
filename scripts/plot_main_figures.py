@@ -6,43 +6,43 @@ from dvd.analysis.plot import ModelAccuracyPlotter
 from dvd.analysis.plot import plot_sweeped_shape_bias_tradeoff_scatter_colormap, plot_shape_bias_tradeoff_scatter_colormap, plot_shape_bias_tradeoff_scatter, plot_shape_bias_data_size_tradeoff 
 
 ################################################################################
-## Figure 2 Training with TVD brings model with shape bias
+## Figure 2 Training with DVD brings model with shape bias
 ################################################################################
 
 # Figure 2A is just illustration panel
 #* Figure 2B | Shpae bias - Accuracy trade off
 # sweeped shape bias - accuracy trade off across models in mini-ecoset
-# plot_sweeped_shape_bias_tradeoff_scatter(
-# colormap = ["magma", "viridis", "plasma" ][1]
-# plot_sweeped_shape_bias_tradeoff_scatter_colormap(
-#     csv_path="results/shape_bias/across_time_miniecoset_sweeped_shape_bias_acc_tradeoff_best_epoch.csv",
-#     analysis_name=f"miniecoset_sweeped_shape_bias_acc_trade_off_colormap_{colormap}_v2",
-#     save_dir="./results/plots/trade_off",
-#     highlight_models = ['mpe2.0_alpha0.1_dn100.0', 'mpe1.0_alpha0.2_dn150.0', 'mpe4.0_alpha0.8_dn50.0'],
-#     xlim = (45, 74),
-#     ylim = (0.3, 1),
-#     figsize = (3.5*0.75, 2),
-#     cmap_name = colormap,
-#     reverse =  False,           # whether to invert cmap_name
-#     use_fixed_range = True,   # switch normalization of colormap mode
-#     fixed_range = (0.6, 1), # only used if use_fixed_range=True
-# )
+plot_sweeped_shape_bias_tradeoff_scatter(
+colormap = ["magma", "viridis", "plasma" ][1]
+plot_sweeped_shape_bias_tradeoff_scatter_colormap(
+    csv_path="results/shape_bias/across_time_miniecoset_sweeped_shape_bias_acc_tradeoff_best_epoch.csv",
+    analysis_name=f"miniecoset_sweeped_shape_bias_acc_trade_off_colormap_{colormap}_v2",
+    save_dir="./results/plots/trade_off",
+    highlight_models = ['mpe2.0_alpha0.1_dn100.0', 'mpe1.0_alpha0.2_dn150.0', 'mpe4.0_alpha0.8_dn50.0'],
+    xlim = (45, 74),
+    ylim = (0.3, 1),
+    figsize = (3.5*0.75, 2),
+    cmap_name = colormap,
+    reverse =  False,           # whether to invert cmap_name
+    use_fixed_range = True,   # switch normalization of colormap mode
+    fixed_range = (0.6, 1), # only used if use_fixed_range=True
+)
 
-# # # trade off across models in ecoset
-# # plot_shape_bias_tradeoff_scatter(
-# plot_shape_bias_tradeoff_scatter_colormap(
-#     csv_path="results/shape_bias/ecoset_shape_bias_acc_trade_off.csv",
-#     analysis_name=f"ecoset_shape_bias_acc_trade_off_colormap_{colormap}",
-#     save_dir="./results/plots/trade_off",
-#     highlight_models = ['DVD-B', 'DVD-S', 'DVD-P'],
-#     xlim = (47, 67),
-#     ylim = (0.3, 1),
-#     figsize = (3.5*0.75, 2),
-#     cmap_name = colormap,
-#     reverse =  False,           # whether to invert cmap_name
-#     use_fixed_range = True,   # switch normalization of colormap mode
-#     fixed_range = (0.6, 1), # only used if use_fixed_range=True
-# )
+# # trade off across models in ecoset
+# plot_shape_bias_tradeoff_scatter(
+plot_shape_bias_tradeoff_scatter_colormap(
+    csv_path="results/shape_bias/ecoset_shape_bias_acc_trade_off.csv",
+    analysis_name=f"ecoset_shape_bias_acc_trade_off_colormap_{colormap}",
+    save_dir="./results/plots/trade_off",
+    highlight_models = ['DVD-B', 'DVD-S', 'DVD-P'],
+    xlim = (47, 67),
+    ylim = (0.3, 1),
+    figsize = (3.5*0.75, 2),
+    cmap_name = colormap,
+    reverse =  False,           # whether to invert cmap_name
+    use_fixed_range = True,   # switch normalization of colormap mode
+    fixed_range = (0.6, 1), # only used if use_fixed_range=True
+)
 
 #* training data size vs shape bais
 # shape_bias_data_size_csv_path = '/home/student/l/lzejin/codebase/P001_dvd_gpus/results/shape_bias/all_models_shape-bias_data_size_model_size.csv'
@@ -56,17 +56,12 @@ from dvd.analysis.plot import plot_sweeped_shape_bias_tradeoff_scatter_colormap,
 #* Figure 2E | examples
 
 ################################################################################
-## Figure 3 Understanding how the model become shape bias
+## Figure 4 Understanding how the model become shape bias
 ################################################################################
-#TODO
-#* Figure 3A | Shape bias and shap/ texture choices changes across time
-
-
-#* Figure 3B | Ablation studies
-
-
-#* Figure 3C | Visualization of feature attribution
-#? just use the models under /share/klab/datasets/texture2shape_projects/share/TVD/main_models
+#! Just see in analysis .py
+#* Figure 4A | Shape bias and shap/ texture choices changes across time
+#* Figure 4B | Ablation studies
+#* Figure 4C | Visualization of feature attribution
 
 ################################################################################
 ## Figure 4 Degradation robustness and adversarial robustness
@@ -74,7 +69,7 @@ from dvd.analysis.plot import plot_sweeped_shape_bias_tradeoff_scatter_colormap,
 #* Figure 4A | Degradation robustness
 # Face & objects under blur degradations
 model_names = ['Face_baseline_no_blur_seed_1',  
-               'Face_DVD-B_no_blur_seed_2', 'Face_DVD-SSS_mpe0-5_no_blur_seed_1', #'Face_baseline_no_blur_seed_2',  'Face_DVD-B_no_blur_seed_2', 'Face_baseline_no_blur_seed_3',  'Face_DVD-B_no_blur_seed_3', #'Face_DVD-B_seed_1', 'Face_DVD-SS_seed_1',
+               'Face_DVD-B_no_blur_seed_1', 
                'ecoset_adult_no_blur',  'ecoset_DVD_B_no_blur',  'ecoset_DVD_S_no_blur', 'ecoset_DVD_P_no_blur', 
                'ecoset_DVD_SS_no_blur', 'ecoset_DVD_PP_no_blur'][:2]#[3:5]
 dataset_name = ['facescrub','ecoset_square256'][0]

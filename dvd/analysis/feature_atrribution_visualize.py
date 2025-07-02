@@ -7,6 +7,7 @@ import torchvision.models as models
 import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
+import json
 
 # Captum library for interpretability
 from captum.attr import LayerLRP
@@ -118,114 +119,6 @@ def plot_lrp_overlay(orig_img_np, relevance_map,
 # 3. Putting it all together with subplots
 ################################################
 
-# def visualize_lrp_comparison(
-#     model_dict,
-#     image_paths,
-#     image_size=256,
-#     layer='layer4',
-#     save_path = f"./results/plots/visualize_features/layer4/lrp_comparison.pdf",
-# ):
-#     """
-#     model_dict: dict of { model_name: model_checkpoint_path, ... }
-#     image_paths: list of image paths (cue-conflict stimuli, etc.)
-#     layer: the layer for LRP (e.g. 'layer4')
-    
-#     We'll produce subplots with:
-#         - rows = number of images
-#         - columns = number of models
-#     Each cell: The original image + LRP overlay for that model.
-#     """
-#     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-#     # Load all models into a dictionary: {model_name: loaded_model}
-#     loaded_models = model_dict
-#     # loaded_models = {}
-#     # for name, ckpt_path in model_dict.items():
-#     #     print(f"Loading model {name} from {ckpt_path}")
-#     #     # Example: ResNet-50 with custom fc
-#     #     model = models.resnet50(pretrained=False)
-#     #     model.fc = nn.Linear(model.fc.in_features, 565)  # adapt to your #classes
-#     #     checkpoint = torch.load(ckpt_path, map_location=device)
-#     #     import pdb; 
-#     #     model.load_state_dict(checkpoint["model_state_dict"])
-#     #     model.to(device)
-#     #     model.eval()
-#     #     loaded_models[name] = model
-
-#     # Prepare subplots
-#     n_images = len(image_paths)
-#     n_models = len(loaded_models)
-#     # import pdb;pdb.set_trace()
-    
-#     fig, axes = plt.subplots(n_images, n_models, 
-#                              figsize=(4*n_models, 4*n_images),
-#                              squeeze=False)
-    
-#     for row_idx, img_path in enumerate(image_paths):
-#         # Load & preprocess image
-#         input_tensor = load_image(img_path, image_size).to(device)
-#         # For display, also keep a “de-normalized” version:
-#         orig_img_np = tensor_to_numpy_for_display(input_tensor)
-
-#         # Forward pass just once for each image
-#         with torch.no_grad():
-#             # We'll pick some reference model to get top class, 
-#             # or you can do it per model. 
-#             # Let's do it per model if you want to show each model's 
-#             # predicted label, for example.
-#             pass
-
-#         for col_idx, (model_name, model_obj) in enumerate(loaded_models.items()):
-#             # forward pass to get top pred (or you can fix the target label)
-#             with torch.no_grad():
-#                 logits = model_obj(input_tensor)
-#                 preds = torch.softmax(logits, dim=1)
-#                 top_class = preds.argmax(dim=1).item()
-
-#             # 1) Compute LRP
-#             relevance = compute_lrp_map(model_obj, input_tensor, top_class, layer=layer)
-            
-#             # 2) Upsample to input size
-#             upsampled = upsample_to_img_size(relevance, (image_size, image_size))
-            
-#             # 3) Plot overlay
-#             ax = axes[row_idx, col_idx]
-#             # Optional: label string like "ModelName\n(predict: dog, e.g.)"
-#             # If you have a label mapping, you can find the predicted label text.
-#             # For now, we'll just show model_name & top_class:
-#             title_str = f"{model_name} (class={top_class})"
-            
-#             # Overlay the upsampled map
-#             plot_lrp_overlay(
-#                 orig_img_np, 
-#                 upsampled, 
-#                 alpha=0.6, 
-#                 cmap='jet',
-#                 subplot_ax=ax,
-#                 title_str=title_str
-#             )
-
-#     plt.tight_layout()
-#     # Save or show
-#     os.makedirs(os.path.dirname(save_path), exist_ok=True)
-#     plt.savefig(save_path)
-#     # plt.show()
-#     print(f"Saved combined LRP figure to {save_path}")
-
-import os
-import json
-import torch
-import torch.nn as nn
-import matplotlib.pyplot as plt
-from torchvision import models
-
-# Assumed helper functions provided elsewhere:
-# load_image(path, size) -> torch.Tensor
-# tensor_to_numpy_for_display(tensor) -> np.ndarray
-# compute_lrp_map(model, input_tensor, target_class, layer) -> torch.Tensor
-# upsample_to_img_size(tensor, size) -> np.ndarray
-# plot_lrp_overlay(image_np, relevance_map, alpha, cmap, subplot_ax, title_str)
-
 def visualize_lrp_comparison(
     model_dict,
     image_paths,
@@ -257,14 +150,6 @@ def visualize_lrp_comparison(
 
     # Load all models
     loaded_models = model_dict
-    # for name, ckpt_path in model_dict.items():
-    #     print(f"Loading model {name} from {ckpt_path}")
-    #     model = models.resnet50(pretrained=False)
-    #     model.fc = nn.Linear(model.fc.in_features, len(lookup))  # adapt to lookup size
-    #     checkpoint = torch.load(ckpt_path, map_location=device)
-    #     model.load_state_dict(checkpoint['model_state_dict'])
-    #     model.to(device).eval()
-    #     loaded_models[name] = model
 
     n_images = len(image_paths)
     n_models = len(loaded_models)
@@ -321,7 +206,7 @@ def visualize_lrp_comparison(
     # Save or show
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path)
-    # plt.show()
+
     print(f"Saved combined LRP figure to {save_path}")
 
 
@@ -332,15 +217,14 @@ def visualize_lrp_comparison(
 if __name__ == "__main__":
 
     MODEL_NAME2PATH = {
-        
-        'EVD': '/home/student/l/lzejin/codebase/All-TNNs/EVD/logs/net_params/blur_sharpnessFeb_resnet50_linear_no_beta_dn150.0_2.0_mixgray1.0_mpe2.0_alpha0.2beta1.0_id_1_lr_0.0001_none_ecoset_square256_dev_retina_fft_development_leReLU0.01_colorspd1_egray0_cs_age50_57.6_T__rm1000.0_seed1/blur_sharpnessFeb_resnet50_linear_no_beta_dn150.0_2.0_mixgray1.0_mpe2.0_alpha0.2beta1.0_id_1_lr_0.0001_none_ecoset_square256_dev_retina_fft_development_leReLU0.01_colorspd1_egray0_cs_age50_57.6_T__rm1000.0_seed1_epoch_154.pth', #  ep149 [0.7964939024390244] but neuroai is lower
-        'baseline': '/home/student/l/lzejin/codebase/All-TNNs/evd/results/shared/for_alex/resnet50_adult.pth',
+        'DVD': '',
+        'baseline': '',
     }
     
     # Suppose you have cue-conflict images: 
     TEST_IMAGES = [
-        "/home/student/l/lzejin/codebase/All-TNNs/evd/data/cue-conflict/cat/cat7-elephant1.png",
-        "/home/student/l/lzejin/codebase/All-TNNs/evd/data/cue-conflict/elephant/elephant6-bottle2.png",
+        "./data/cue-conflict/cat/cat7-elephant1.png",
+        "./data/cue-conflict/elephant/elephant6-bottle2.png",
     ]
 
     # Call the comparison function

@@ -4,14 +4,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import scienceplots
 import matplotlib as mpl
-
-
-
 from scipy.io import loadmat
 from scipy.optimize import curve_fit
 from matplotlib.ticker import MaxNLocator
 from matplotlib import cm
-
 import ast
 from io import StringIO
 
@@ -26,50 +22,7 @@ plt.rcParams['xtick.labelsize'] = 5
 plt.rcParams['ytick.labelsize'] = 5
 plt.rcParams['legend.fontsize'] = 5
 
-#####
-## Plot shape bias across time, accuracy, accuracy under adv attacks
-#####
-# def plot_shape_bias_across_time(csv_path, colors = [np.array([49, 162, 142]) / 255, 'black', 'blue', 'orange', 'red'], save_path=None):
-#     """
-#     Reads shape-bias data from a CSV file and plots how shape bias evolves over time.
 
-#     CSV is assumed to have columns:
-#       model_name,epoch,top1,top5,shape_bias,timepoint
-
-#     The 'shape_bias' column is in the form '[0.5]', so we parse out the float value.
-#     The time in months is computed as (epoch + 1) * 2.
-#     """
-#     # Read the CSV
-#     df = pd.read_csv(csv_path)
-
-#     # Parse shape_bias from the bracketed string "[x]" into a float
-#     # df['shape_bias'] = df['shape_bias'].str.strip('[]').astype(float)
-#     df['shape_bias'] = df['shape_bias'].astype(float)
-
-#     # Compute time in months from epoch
-#     df['months'] = (df['epoch'] + 1) * 2
-
-#     # Create the plot
-#     plt.figure(figsize=(3.54, 2))
-
-#     # Plot each model's shape bias over time
-#     for model_name in df['model_name'].unique():
-#         subset = df[df['model_name'] == model_name]
-#         plt.plot(subset['months'], subset['shape_bias'], marker='o', label=model_name, color=colors.pop(0))
-
-#     # Labeling and styling
-#     plt.xlabel('Time (Months)')
-#     plt.ylabel('Shape Bias')
-#     plt.title('Shape Bias Development Over Time')
-#     plt.legend()
-#     plt.grid(True, linestyle='--', alpha=0.5)
-#     # remove top and right spines
-#     plt.gca().spines['top'].set_visible(False)
-#     plt.gca().spines['right'].set_visible(False)
-#     plt.tight_layout()
-#     if save_path:
-#         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-#         plt.savefig(save_path, dpi=300)
 def plot_shape_bias_across_time(csv_path, colors=['steelblue', 'black', 'blue', 'orange', 'red'], include_humans=True, save_path=None):
     """
     Reads shape-bias data from a CSV file and plots how shape bias evolves over time.
@@ -127,7 +80,7 @@ def plot_shape_bias_across_time(csv_path, colors=['steelblue', 'black', 'blue', 
 
     plt.show()
 
-# "median_shape_bias","model_type","shape_acc","texture_acc","shape_bias_per_class",
+
 def plot_shape_and_texture_accuracy_across_time(csv_path, colors=[np.array([49, 162, 142]) / 255, 'black'], save_path=None):
     """
     Plots shape accuracy and texture accuracy of models across time using data from a CSV file.
@@ -268,73 +221,6 @@ def multi_curve_plot(pivot_df, x_values, x_label, y_label, title, save_path, mod
         plt.close()
 
 
-# # New helper that draws on a given Axes
-# def multi_curve_on_ax(ax, pivot_df, x_values, x_label, y_label, title, model_colors):
-#     for model in pivot_df.columns:
-#         ax.plot(x_values, pivot_df[model].values,
-#                 marker='o', linestyle='-',
-#                 label=model, color=model_colors.get(model))
-#     ax.set_xticks(x_values)
-#     ax.set_xticklabels([str(int(x)) for x in x_values])
-#     ax.set_xlabel(x_label)
-#     ax.set_ylabel(y_label)
-#     ax.set_title(title)
-#     ax.legend(fontsize='small')
-#     ax.grid(True)
-
-
-
-# def plot_degradation_grid(degradation_df, save_dir,
-#                           figsize=(3.5*2, 2*4),
-#                           model_colors=None):
-#     """
-#     Plots a 4×4 grid of severity curves for each degradation type,
-#     comparing all models present in the DataFrame.
-#     """
-#     os.makedirs(save_dir, exist_ok=True)
-
-#     all_types = sorted(degradation_df['distortion'].unique())
-#     models = sorted(degradation_df['model'].unique())
-
-#     # Default color map
-#     if model_colors is None:
-#         default_colors = ['gray', 'green', 'blue', 'orange', 'red', 'purple']
-#         model_colors = {m: default_colors[i % len(default_colors)]
-#                         for i, m in enumerate(models)}
-
-#     # Setup grid
-#     n = len(all_types)
-#     ncols = 4
-#     nrows = (n + ncols - 1) // ncols
-#     fig, axes = plt.subplots(nrows, ncols,
-#                              figsize=figsize,
-#                              sharey=True)
-#     axes = axes.flatten()
-
-#     for ax, dtype in zip(axes, all_types):
-#         sub = degradation_df[degradation_df['distortion'] == dtype]
-#         pivot = sub.pivot(index='severity', columns='model', values='accuracy')
-#         pivot = pivot.sort_index()
-#         x_vals = pivot.index.tolist()
-#         multi_curve_on_ax(ax, pivot, x_vals,
-#                           x_label='Severity',
-#                           y_label='Accuracy',
-#                           title=dtype,
-#                           model_colors=model_colors)
-
-#     # remove unused axes
-#     for ax in axes[len(all_types):]:
-#         fig.delaxes(ax)
-
-#     plt.tight_layout()
-#     out_path = os.path.join(save_dir, 'degradation_robustness_grid.pdf')
-#     print(f'Saving full grid to {out_path}')
-#     fig.savefig(out_path, dpi=300)
-#     plt.close(fig)
-
-import os
-import pandas as pd
-import matplotlib.pyplot as plt
 
 def multi_curve_on_ax(ax, pivot_df, x_values, x_label, y_label, title,
                       model_colors, show_legend=False, font_size=5):

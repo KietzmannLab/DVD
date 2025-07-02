@@ -1,15 +1,13 @@
 
 import argparse
-import builtins
 import math
 import os
-import shutil
 import sys
 import time
-from functools import partial
-
 import yaml
-
+import wandb 
+import logging
+from logging.config import fileConfig
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -17,20 +15,9 @@ import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
-import torchvision.transforms as transforms
-import torchvision.datasets as datasets
 import torchvision.models as torchvision_models
 
-import wandb 
-
-import dvd.simclr.builder
-import dvd.simclr.loader
-import dvd.simclr.optimizer
 import dvd.utils
-import dvd.models.vits
-import logging
-from logging.config import fileConfig
-
 import dvd.dvd.development
 import dvd.models.loader
 import dvd.models.eval
@@ -45,10 +32,7 @@ torchvision_model_names = sorted(
 )
 
 model_names = [
-    "vit_small",
-    "vit_base",
-    "vit_conv_small",
-    "vit_conv_base",
+    "customCNN",
 ] + torchvision_model_names
 
 parser = argparse.ArgumentParser(description="Model Training")
@@ -64,7 +48,6 @@ parser.add_argument(
     "--arch",
     metavar="ARCH",
     default="resnet50",
-    # choices=model_names, # Now also include models in timm
     help="model architecture: " + " | ".join(model_names) + " (default: resnet50)",
 )
 parser.add_argument(
@@ -435,7 +418,7 @@ def train(
 
         # Experience across visual development
         if args.development_strategy == "dvd":
-            contrast_control_coeff = max(math.floor(age_months / args.decrease_contrast_threshold_spd) * 2, 1)
+            contrast_control_coeff = max(math.floor(age_months / args.decrease_contrast_threshold_spd) * math.floor(math.e), 1) # instead of using * math.e, you can also just use math.floor(math.e)=2
             images = dvd.dvd.development.DVDTransformer().apply_fft_transformations(
                 images,
                 age_months,
