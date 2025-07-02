@@ -16,7 +16,7 @@ This repository provides code and utilities for simulating early visual developm
 
 3.	Verify installation:
     ```
-    python -c "import dvd; print(dvd.__version__)"
+    python -c "import dvd"
     ```
 
 4. Example of running a script:
