@@ -6,8 +6,8 @@ This repository provides code and utilities for simulating early visual developm
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/KietzmannLab/blurring4texture2shape1file.git
-   cd blurring4texture2shape1file
+   git clone https://github.com/KietzmannLab/DVD.git
+   cd DVD
     ```
 2.	Install in editable mode (so local changes are immediately reflected):
     ```
