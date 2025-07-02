@@ -16,6 +16,7 @@
 #! Note probably this should not exceed the total number of GPUs in use.
 #SBATCH --ntasks=1 
 ##SBATCH --ntasks-per-node=1          # Number of tasks per node (e.g., GPUs per node)
+##SBATCH --nodelist=hpc3-54
 
 #! error and output file?
 #SBATCH --error=./logs/slurm_logs_v2/h100_multi_error.o%j

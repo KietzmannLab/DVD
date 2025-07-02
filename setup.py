@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
 setup(
-    name="evd",
+    name="dvd",
     packages=find_packages(),
 )

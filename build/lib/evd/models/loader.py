@@ -6,59 +6,168 @@ import torchvision.models as torchvision_models
 import evd.models.vits
 import evd.simclr.optimizer
 
+import torch.nn as nn
+import timm
+from torchvision import models as torchvision_models
 
 
 def create_model(args, logger=None):
     """
-    Creates the model (either ViT or torchvision model) and adjusts the final layer 
-    based on dataset_name. 
+    Creates the model (from torchvision if possible, otherwise from timm)
+    and adjusts the final layer based on dataset_name.
     """
     if logger:
-        logger.info("Creating model '{}'".format(args.arch))
-        
-    if args.arch.startswith("vit") or 'transformer' in args.arch:
-        # model = evd.models.vits.__dict__[args.arch]()
-        model = torchvision_models.__dict__[args.arch]()
-        linear_keyword = "head"
-    else:
-        model = torchvision_models.__dict__[args.arch]()
-        linear_keyword = "fc"
+        logger.info(f"Creating model '{args.arch}'")
 
+    # Try loading from torchvision first
+    if args.arch in torchvision_models.__dict__:
+        # Load pretrained model from torchvision
+        model = torchvision_models.__dict__[args.arch](pretrained=False)
+        # import pdb;pdb.set_trace()
+        # Decide which layer name to change
+        if args.arch in [
+                "VisionTransformer",
+                "ViT_B_16_Weights",
+                "ViT_B_32_Weights",
+                "ViT_L_16_Weights",
+                "ViT_L_32_Weights",
+                "ViT_H_14_Weights",
+                "vit_b_16",
+                "vit_b_32",
+                "vit_l_16",
+                "vit_l_32",
+                "vit_h_14",
+            ]:
+            # Only for ViT models in torchvsion models
+            linear_keyword = "heads"
+            pass 
+        elif "vit" in args.arch or "transformer" in args.arch or "swin_" in args.arch:
+            linear_keyword = "head"
+        else:
+            if hasattr(model, 'classifier'):
+                linear_keyword = "classifier"
+            elif hasattr(model, 'head'):
+                linear_keyword = "head"
+            elif hasattr(model, 'fc'):
+                linear_keyword = "fc"
+            else:
+                raise ValueError(f"Unable to determine final layer for {args.arch}.")
+    else:
+        # Otherwise, fallback to timm for e.g., DeiT, Swin, etc.
+        # e.g deit_base_patch16_224 and more see 
+        try:
+            model = timm.create_model(args.arch, pretrained=False)
+        except Exception as e:
+            raise ValueError(
+                f"Model architecture '{args.arch}' not found in torchvision or timm."
+            ) from e
+
+        # Decide which layer name to change
+        if "vit" in args.arch or "transformer" in args.arch or "swin_" in args.arch:
+            linear_keyword = "head"
+        else:
+            # For non-ViT or transformer models from timm, we can guess:
+            if hasattr(model, 'fc'):
+                linear_keyword = "fc"
+            elif hasattr(model, 'classifier'):
+                linear_keyword = "classifier"
+            elif hasattr(model, 'head'):
+                linear_keyword = "head"
+            else:
+                raise ValueError(f"Unable to determine final layer for {args.arch}.")
+
+    # Select how many classes we want based on dataset_name
     if args.dataset_name == "texture2shape_miniecoset":
         out_dim = 112
-        model = change_last_layer(args, model, out_dim)
-
     elif args.dataset_name in ["ecoset_square256", "ecoset_square256_patches"]:
         out_dim = 565
-        model = change_last_layer(args, model, out_dim)
     elif args.dataset_name == "imagenet":
         out_dim = 1000
-        model = change_last_layer(args, model, out_dim)
+    elif  args.dataset_name == 'facescrub':
+        out_dim = 118
     else:
         raise ValueError(f"dataset_name: {args.dataset_name} not supported")
 
+    # Update the final layer to match our number of classes
+    try:
+        model = change_last_layer(args, model, out_dim, linear_keyword)
+    except:
+        # Only for ViT models in torchvsion models
+        model = change_vit_num_classes(model, num_classes=out_dim)
+
     return model, linear_keyword
 
-# change the last layer
-def change_last_layer(args, model, out_dim):
+def change_last_layer(args, model, out_dim, linear_keyword):
     """
-    Changes the last layer of the model based on the dataset_name.
+    Changes the last layer of the model to match out_dim based on linear_keyword.
     """
-    if args.arch.startswith("resnet") or 'resnext' in args.arch:
+    # For ResNet/ResNeXt
+    if linear_keyword == "fc" and hasattr(model, 'fc'):
         model.fc = nn.Linear(model.fc.in_features, out_dim)
-    elif args.arch.startswith("alexnet") or args.arch.startswith("vgg"):
-        model.classifier[6] = nn.Linear(model.classifier[6].in_features, out_dim)
-    elif args.arch.startswith("vit") or 'transformer' in args.arch:
-        model.head = nn.Linear(model.head.in_features, out_dim)
+
+    # For e.g. AlexNet, VGG, or any model with 'classifier' as a Sequential or Linear
+    elif linear_keyword == "classifier" and hasattr(model, 'classifier'):
+        # If classifier is a single linear layer
+        if isinstance(model.classifier, nn.Linear):
+            in_features = model.classifier.in_features
+            model.classifier = nn.Linear(in_features, out_dim)
+        # If classifier is a Sequential (like in VGG/AlexNet)
+        elif isinstance(model.classifier, nn.Sequential):
+            in_features = model.classifier[-1].in_features
+            model.classifier[-1] = nn.Linear(in_features, out_dim)
+        else:
+            raise ValueError("Unsupported classifier structure.")
+
+    # For ViT / Swin / DeiT typically using 'head'
+    elif linear_keyword == "head" and hasattr(model, 'head'):
+        in_features = model.head.in_features
+        model.head = nn.Linear(in_features, out_dim)
+
     else:
-        raise ValueError(f"arch: {args.arch} not supported")
+        # If none of the above matched, raise an error
+        raise ValueError(
+            f"Could not change final layer for arch '{args.arch}' with linear_keyword='{linear_keyword}'."
+        )
+
     return model
 
+
+def change_vit_num_classes(model: nn.Module, num_classes: int) -> nn.Module:
+    """
+    Replace the final classification head of a VisionTransformer model (e.g. vit_b_16)
+    with a new linear layer having the specified number of output classes.
+
+    Args:
+        model (nn.Module): An instance of VisionTransformer (e.g. output of vit_b_16())
+        num_classes (int): The desired number of classes for the new classifier.
+        
+    Returns:
+        nn.Module: The updated model with a new final classification layer.
+    """
+    # Ensure the model has the attribute 'heads'
+    if hasattr(model, "heads") and isinstance(model.heads, nn.Sequential):
+        # Check if the Sequential container has "head" as a key
+        if "head" in model.heads._modules:
+            # Retrieve the original head layer
+            orig_head = model.heads._modules["head"]
+            in_features = orig_head.in_features
+            # Replace it with a new linear layer mapping to num_classes outputs
+            model.heads._modules["head"] = nn.Linear(in_features, num_classes)
+            # Optionally update the attribute model.num_classes if defined
+            model.num_classes = num_classes
+            return model
+
+    # If the expected structure is not found, raise an error.
+    raise ValueError(
+        f"Could not change the final layer for the provided model. "
+        f"Expected 'heads' to contain key 'head'. Model structure: {model}"
+    )
 
 def remove_prefix(state_dict):
     """Strip the DataParallel prefix from state dict keys if it exists."""
     new_state_dict = {}
     for k, v in state_dict.items():
+        # import pdb; pdb.set_trace()
         if k.startswith("module._orig_mod."):
             new_key = k[len("module._orig_mod."):]
         #     # new_key = k[:len("module.")]+k[len("module._orig_mod."):]

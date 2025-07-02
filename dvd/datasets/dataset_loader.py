@@ -1,20 +1,26 @@
+import os
+from PIL import Image
 import h5py
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 import torch.nn as nn
 import torchvision
 from torchvision.transforms import transforms
 from torchvision import transforms, datasets
-from evd.datasets.view_generator import ContrastiveLearningViewGenerator
+from dvd.datasets.view_generator import ContrastiveLearningViewGenerator
 
 from typing import Optional, Dict
 
 import kornia
 import kornia.augmentation as K
 import kornia.filters as KF
-import evd.utils
+import dvd.utils
+
+##############################
+## Testing datasets loader
+##############################
 
 def get_test_loaders(args):
     """
@@ -35,66 +41,98 @@ def get_test_loaders(args):
         # sampler=test_sampler,
         drop_last=True,
     )
-
     return test_loader
 
-
-class Ecoset(Dataset):
+def get_blur_loader(sigma: int, args) -> DataLoader:
     """
-    Example dataset class for Ecoset, similar to your original code.
-    Note: This class is simplified and only demonstrates reading data.
+    DataLoader for the sigma‐blurred test set.
+    Expects args['dataset']['name'] in {'texture2shape_miniecoset','facescrub'}
+    and HDF5 files named accordingly under your robustness_datasets folder.
     """
+    image_size = 256
+    ds_name = args.dataset_name
+    if ds_name == 'texture2shape_miniecoset':
+        base = "/home/student/l/lzejin/codebase/P001_dvd_gpus/data/robustness_datasets/degradation_images_generator/data/miniecoset/blurred/"
+        split = 'test'
+        fname = f"texture2shape_miniecoset_{image_size}px_sigma_{sigma}_blurred.h5"
+    elif ds_name == 'ecoset_square256':
+        base = "/home/student/l/lzejin/codebase/P001_dvd_gpus/data/robustness_datasets/degradation_images_generator/data/objects_blurred_datasets/"
+        split = 'test'
+        fname = f"ecoset_{image_size}px_sigma_{sigma}_blurred.h5"
+    elif ds_name == 'facescrub':
+        base = "/home/student/l/lzejin/codebase/P001_dvd_gpus/data/robustness_datasets/degradation_images_generator/data/faces_blurred_datasets/"
+        split = 'test'
+        fname = f"facescrub_{image_size}px_sigma_{sigma}_blurred.h5"
+    else:
+        raise ValueError(f"Unsupported dataset for blur: {ds_name}")
 
-    def __init__(self, split, dataset_path, transform=None, in_memory=False):
-        """
-        Args:
-            dataset_path (string): Path to the .h5 file
-            transform (callable, optional): Optional transforms to be applied on a sample.
-            in_memory (bool): Whether to preload the entire dataset into memory.
-        """
-        self.dataset_path = dataset_path
-        self.split = split
-        self.transform = transform
-        self.in_memory = in_memory
+    path = os.path.join(base, fname)
+    print(f"[blur_loader_fn] Loading: {path}")
 
-        if self.in_memory:
-            # Load entire dataset into memory
-            with h5py.File(self.dataset_path, "r") as f:
-                self.images = torch.from_numpy(f[split]['data'][()]).permute(0, 3, 1, 2)
-                self.labels = torch.from_numpy(f[split]['labels'][()].astype(np.int64))
-        else:
-            # Lazy load
-            self.h5_ref = h5py.File(self.dataset_path, "r")[split]
-            self.images = self.h5_ref['data']
-            self.labels = self.h5_ref['labels']
+    # simple torchvision test‐transform
+    test_tf = transforms.Compose([
+        transforms.ToPILImage(),  # handles Tensor or ndarray → PIL
+        transforms.ToTensor(),
+        # transforms.Normalize(mean=mean.tolist(), std=std.tolist()),
+    ])
 
-    def __len__(self):
-        return len(self.labels)
+    # wrap your Ecoset HDF5 reader
+    ds = Ecoset(split=split, dataset_path=path, transform=test_tf, in_memory=False)
+    loader = DataLoader(
+        ds,
+        batch_size=args.batch_size_per_gpu,
+        num_workers=args.workers,
+        pin_memory=True,
+    )
+    return loader
 
-    def __getitem__(self, idx):
-        if self.in_memory:
-            img = self.images[idx]
-            label = self.labels[idx]
-        else:
-            # On-the-fly access
-            img = torch.from_numpy(np.asarray(self.images[idx])).permute((2, 0, 1))
-            label = torch.from_numpy(np.asarray(self.labels[idx])).long()
 
-        if self.transform:
-            img = self.transform(img)
+def get_distortion_loader(method: str, severity: int, args) -> DataLoader:
+    """
+    DataLoader for an ImageNet-C style corruption:
+      `method` (e.g. "Gaussian Noise") at `severity` (1–5).
+    HDF5 files live under your distorted_datasets folder.
+    """
+    image_size = 256
+    ds_name = args.dataset_name
+    if ds_name == 'ecoset_square256':
+        # base = "/share/klab/datasets/robustness_datasets/degradation_images_generator/data/ecoset_old/full_ecoset_distorted_datasets_v1/"
+        base = "/share/klab/datasets/robustness_datasets/degradation_images_generator/data/ecoset_degradtions/"
+    else:
+        # base = "/share/klab/datasets/robustness_datasets/distorted_datasets/"
+        raise ValueError(f"Unsupported dataset for distortion: {ds_name}")
+    # fname = f"{method.replace(' ', '_')}_severity_{severity}_{image_size}px.h5"
+    fname =  f"{method.replace(' ','_')}_sev{severity}_{image_size}px.h5"
+    path = os.path.join(base, fname)
+    print(f"[distortion_loader_fn] Loading: {path}")
 
-        return img, label
+    test_tf = transforms.Compose([
+        transforms.ToPILImage(), 
+        transforms.ToTensor(),
+    ])
+        # transforms.Normalize(mean=mean.tolist(), std=std.tolist()),
+
+    ds = Ecoset(split='test', dataset_path=path, transform=test_tf, in_memory=True)
+    loader = DataLoader(
+        ds,
+        batch_size=args.batch_size_per_gpu,
+        num_workers=args.workers,
+        pin_memory=True,
+    )
+    return loader
 
 
 class KorniaTransform(nn.Module):
-    def __init__(self, aug_pipe, normalize_type, hyp):
+    def __init__(self, aug_pipe, normalize_type, args):
         super().__init__()
         self.aug_pipe = aug_pipe
         self.normalize_type = normalize_type
+        # expose a 'transforms' list for compatibility checks
+        self.transforms = getattr(aug_pipe, 'transforms', [])
 
-        if hyp is not None and 'train_img_mean_channels' in hyp:
-            self.mean = torch.tensor(hyp['train_img_mean_channels']) / 255.0
-            self.std = torch.tensor(hyp['train_img_std_channels']) / 255.0
+        if args is not None and 'train_img_mean_channels' in args:
+            self.mean = torch.tensor(args['train_img_mean_channels']) / 255.0
+            self.std = torch.tensor(args['train_img_std_channels']) / 255.0
         else:
             self.mean = torch.tensor([0.485, 0.456, 0.406])
             self.std = torch.tensor([0.229, 0.224, 0.225])
@@ -119,6 +157,20 @@ class KorniaTransform(nn.Module):
             raise ValueError(f"Unknown normalize type: {self.normalize_type}")
         return x
 
+class KorniaTransform(nn.Module):
+    def __init__(self, aug_pipe, normalize_type, args):
+        super().__init__()
+        self.aug_pipe = aug_pipe
+        self.normalize_type = normalize_type
+        self.transforms = getattr(aug_pipe, 'transforms', []) # expose a 'transforms' list for compatibility checks
+
+
+    def forward(self, x):
+        if not torch.is_tensor(x):
+            x = torchvision.transforms.functional.to_tensor(x) # if not a tensor, convert it to tensor
+        x = self.aug_pipe(x) # x should be a Tensor (C,H,W) or (B,C,H,W) on GPU/CPU
+        x = x.squeeze()  # remove extra batch dim if present
+        return x
 
 class SupervisedLearningDataset:
     """
@@ -128,17 +180,16 @@ class SupervisedLearningDataset:
 
     def __init__(self, 
                  root_folder: str, 
-                 hyp= None):
+                 args= None):
         """
         :param root_folder: Base path to your datasets
-        :param hyp: A dictionary of hyperparameters/configs
+        :param args: A dictionary of argserparameters/configs
         """
         self.root_folder = root_folder
-        self.hyp = hyp if hyp is not None else {}
+        self.args = args if args is not None else {}
 
     def get_supervised_pipeline_transform(self, 
                                           train: bool = True, 
-                                          hyp = None,
                                           normalize_type: str = '0-1') -> KorniaTransform:
         """
         Build a Kornia (or torchvision) augmentation pipeline as an nn.Module
@@ -149,26 +200,20 @@ class SupervisedLearningDataset:
 
         # 1) Convert images to float [0,1]
         aug_list.append(torchvision.transforms.ConvertImageDtype(torch.float))
-
-        try:
-            if self.hyp.resize_to_224:
-                print("Resize to 224x224")
-                aug_list.append(K.Resize((224, 224)))
-        except:
-            print("Fail to resize to 224x224")
-            pass
-
+        # 2) Resize to 224x224 or 256x256 if specified in args
+        aug_list.append(K.Resize((self.args.image_size, self.args.image_size)))
+    
         if train:
             # Typical augmentations for training
             aug_list.append(K.RandomHorizontalFlip(p=0.25))
             aug_list.append(K.RandomRotation(degrees=15.0, p=0.25))
-            # if self.hyp.grayscale_aug:
             aug_list.append(K.RandomGrayscale(p=0.5))
             aug_list.append(K.RandomBrightness(brightness=(0.8, 1.2), p=0.5))
             aug_list.append(K.RandomEqualize(p=0.5))
             aug_list.append(K.RandomPerspective(distortion_scale=0.5, p=0.5))
             aug_list.append(K.RandomSharpness(p=0.5))
-            aug_list.append(K.RandomGaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0), p=0.5))
+            if getattr(self.args, "blur_aug", False):
+                aug_list.append(K.RandomGaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0), p=0.5))
         else:
             # Typical "inference" transforms (e.g. CenterCrop, Resize)
             # Adjust as per your dataset dimension preferences:
@@ -178,7 +223,7 @@ class SupervisedLearningDataset:
 
         # Build the final pipeline
         augmentations = nn.Sequential(*aug_list)
-        return KorniaTransform(augmentations, normalize_type, hyp)
+        return KorniaTransform(augmentations, normalize_type, self.args)
 
     def get_dataset(self, dataset_name: str) -> Dict[str, torch.utils.data.Dataset]:
         """
@@ -191,9 +236,13 @@ class SupervisedLearningDataset:
             'ecoset_square256_patches': self._get_ecoset_square256_patches,
             'imagenet': self._get_imagenet,
             'facescrub': self._get_facescrub,
-            'stl10': self._get_stl10
+            'stl10': self._get_stl10,
+            'coco-split515': self._get_coco_split515,
+            'skeleton_ayzenberg': self._get_skeleton_ayzenberg,
         }
 
+        # import pdb;pdb.set_trace()
+        
         if dataset_name not in valid_datasets:
             raise InvalidDatasetSelection(f"Dataset {dataset_name} not supported.")
 
@@ -209,7 +258,7 @@ class SupervisedLearningDataset:
         Example: texture2shape_miniecoset dataset using an .h5 file
         with train/val/test splits.
         """
-        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size = 256 #self.args.get('dataset', {}).get('image_size', 256)
         dataset_path = f"{self.root_folder}/texture2shape_miniecoset_{image_size}px.h5" 
         print(f"[INFO] Loading texture2shape_miniecoset dataset from {dataset_path}")
 
@@ -248,7 +297,7 @@ class SupervisedLearningDataset:
         """
         Example: Ecoset with 256x256 images
         """
-        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size = 256 #self.args.get('dataset', {}).get('image_size', 256)
         dataset_path = f"{self.root_folder}/ecoset_square{image_size}_proper_chunks.h5"
         print(f"[INFO] Loading ecoset_square256 dataset from {dataset_path}")
 
@@ -285,7 +334,7 @@ class SupervisedLearningDataset:
         """
         Example: Ecoset patches
         """
-        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size = 256 #self.args.get('dataset', {}).get('image_size', 256)
         dataset_path = f"{self.root_folder}/optimized_datasets/megacoset.h5"
         print(f"[INFO] Loading ecoset_square256_patches dataset from {dataset_path}")
 
@@ -323,20 +372,20 @@ class SupervisedLearningDataset:
         Example: ImageNet. For demonstration, we use torchvision's
         datasets.FakeData as a placeholder.
         """
-        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 224)
+        image_size = 256 #self.args.get('dataset', {}).get('image_size', 224)
         imagenet_path= "/share/klab/datasets/imagenet/"
         print(f"[INFO] Loading ImageNet dataset ({imagenet_path}).")
 
         train_transform = self.get_supervised_pipeline_transform(train=True)
         val_test_transform   = self.get_supervised_pipeline_transform(train=False)
 
-        from evd.datasets.imagenet.imagenet import load_imagenet
+        from dvd.datasets.imagenet.imagenet import load_imagenet
         imagenet_path= "/share/klab/datasets/imagenet/"
 
         train_dataset, train_sampler, val_dataset = load_imagenet(imagenet_path=imagenet_path,
-                                                    batch_size=self.hyp.batch_size_per_gpu,
+                                                    batch_size= self.args.batch_size_per_gpu,
                                                     distributed = True,
-                                                    workers = self.hyp.workers,
+                                                    workers = self.args.workers,
                                                     train_transforms = train_transform,
                                                     test_transforms= val_test_transform,
                                                     # normalization = False, # Not setting norm here
@@ -345,7 +394,61 @@ class SupervisedLearningDataset:
         return {
             'train': train_dataset,
             'val': val_dataset,
-            'test': None
+            'test': val_dataset,
+        }
+    
+    def _get_skeleton_ayzenberg(self) -> Dict[str, torch.utils.data.Dataset]:
+        image_size = 256
+        data_path = "/home/student/l/lzejin/codebase/P001_dvd_gpus/data/skeleton_ayzenberg/original/"  # change as appropriate
+        print(f"[INFO] Loading Skeleton Ayzenberg dataset from ({data_path}).")
+
+        transform = self.get_supervised_pipeline_transform(train=False)
+        test_dataset = Dataset_from_Dir(root_dir=data_path, transform=transform)
+
+        return {
+            'train': None,
+            'val': test_dataset,
+            'test': test_dataset,
+    }
+
+    def _get_coco_split515(self) -> Dict[str, torch.utils.data.Dataset]:
+        """
+        Example: coco-split515 dataset using an .h5 file
+        with train/val/test splits.
+        """
+        image_size = 256  # fixed for this split
+        dataset_path = f"{self.root_folder}/gaze_stitching_dataset/coco-split515.h5"
+        print(f"[INFO] Loading coco-split515 dataset from {dataset_path}")
+
+        # Get your usual train/val/test transforms
+        train_transform = self.get_supervised_pipeline_transform(train=True)
+        val_transform   = self.get_supervised_pipeline_transform(train=False)
+        test_transform  = self.get_supervised_pipeline_transform(train=False)
+
+        # Instantiate one HDF5-backed dataset per split.
+        train_dataset = COCOSplitH5Dataset(
+            split='train',
+            dataset_path=dataset_path,
+            transform=train_transform,
+            in_memory=True
+        )
+        val_dataset = COCOSplitH5Dataset(
+            split='val',
+            dataset_path=dataset_path,
+            transform=val_transform,
+            in_memory=True
+        )
+        test_dataset = COCOSplitH5Dataset(
+            split='test',
+            dataset_path=dataset_path,
+            transform=test_transform,
+            in_memory=True
+        )
+
+        return {
+            'train': train_dataset,
+            'val': val_dataset,
+            'test': test_dataset
         }
 
     def _get_facescrub(self) -> Dict[str, torch.utils.data.Dataset]:
@@ -353,8 +456,9 @@ class SupervisedLearningDataset:
         Example: FaceScrub dataset usage from an HDF5 file with 
         train/val/test splits.
         """
-        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
-        dataset_file = f"{self.root_folder}/facescrub_{image_size}px.h5"
+        image_size = 256 #self.args.get('dataset', {}).get('image_size', 256)
+        # dataset_file = f"{self.root_folder}/facescrub_{image_size}px.h5"
+        dataset_file =  f'{self.root_folder}/texture2shape_projects/generate_facescrub_dataset/facescrub_256px.h5'
         print(f"[INFO] Loading facescrub dataset from {dataset_file}")
 
         train_transform = self.get_supervised_pipeline_transform(train=True)
@@ -437,17 +541,17 @@ class ContrastiveLearningDataset:
     the ContrastiveLearningDataset used in SimCLR-like frameworks.
     """
 
-    def __init__(self, root_folder, n_views, hyp=None):
+    def __init__(self, root_folder, n_views, args=None):
         """
         :param root_folder: Base path to your datasets
-        :param hyp: A dictionary of hyperparameters/configs
+        :param args: A dictionary of argserparameters/configs
         :param n_views: Number of augmented views to generate (default=2 for standard contrastive learning)
         """
         self.root_folder = root_folder
-        self.hyp = hyp if hyp is not None else {}
+        self.args = args if args is not None else {}
         self.n_views = n_views
     
-    def get_simclr_pipeline_transform(train=True, hyp=None, normalize_type='0-1'):
+    def get_simclr_pipeline_transform(self, train=True, args=None, normalize_type='0-1'):
         """
         Build a Kornia augmentation pipeline as an nn.Module.
         All transforms will run on GPU if the input tensor is on GPU.
@@ -456,23 +560,25 @@ class ContrastiveLearningDataset:
 
         # ADD to float, need to be done before Kornia transforms
         aug_list.append(torchvision.transforms.ConvertImageDtype(torch.float))
+        aug_list.append(K.Resize((self.args.image_size, self.args.image_size)))
 
         if train:
             #* Now set the same as supervised learning
             aug_list.append(K.RandomHorizontalFlip(p=0.25))
             aug_list.append(K.RandomRotation(degrees=15.0, p=0.25))
-            # if args.grayscale_aug:
+            # if self.args.grayscale_aug:
             aug_list.append(K.RandomGrayscale(p=0.5))
             aug_list.append(K.RandomBrightness(brightness=(0.8, 1.2), p=0.5))
             aug_list.append(K.RandomEqualize(p=0.5))
             aug_list.append(K.RandomPerspective(distortion_scale=0.5, p=0.5))
             aug_list.append(K.RandomSharpness(p=0.5))
-            aug_list.append(K.RandomGaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0), p=0.5))
+            if getattr(self.args, "blur_aug", False):
+                aug_list.append(K.RandomGaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0), p=0.5))
 
         # Build the final pipeline
         augmentations = nn.Sequential(*aug_list)
 
-        return KorniaTransform(augmentations, normalize_type, hyp)
+        return KorniaTransform(augmentations, normalize_type, self.args)
 
     def get_dataset(self, dataset_name):
         """
@@ -503,7 +609,7 @@ class ContrastiveLearningDataset:
         """
         Example: texture2shape_miniecoset dataset, referencing the .h5 path as in your original code.
         """
-        image_size =  256 #self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size =  256 #self.args.get('dataset', {}).get('image_size', 256)
         dataset_path = f"{self.root_folder}/texture2shape_miniecoset_{image_size}px.h5" 
         print(f"[INFO] Loading texture2shape_miniecoset dataset from {dataset_path}")
 
@@ -525,7 +631,7 @@ class ContrastiveLearningDataset:
         """
         Example: Ecoset with 256x256 images
         """
-        image_size = 256 # self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size = 256 # self.args.get('dataset', {}).get('image_size', 256)
         dataset_path = f"{self.root_folder}/ecoset_square{image_size}_proper_chunks.h5"
         print(f"[INFO] Loading ecoset_square256 dataset from {dataset_path}")
 
@@ -536,7 +642,7 @@ class ContrastiveLearningDataset:
             split='train',
             dataset_path=dataset_path,
             transform=contrastive_transform,
-            in_memory=False
+            in_memory=True
         )
         return dataset
 
@@ -544,7 +650,7 @@ class ContrastiveLearningDataset:
         """
         Example: Ecoset patches
         """
-        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size = 256 #self.args.get('dataset', {}).get('image_size', 256)
         dataset_path = f"{self.root_folder}/optimized_datasets/megacoset.h5"
         print(f"[INFO] Loading ecoset_square256_patches dataset from {dataset_path}")
 
@@ -555,7 +661,7 @@ class ContrastiveLearningDataset:
             split='train',
             dataset_path=dataset_path,
             transform=contrastive_transform,
-            in_memory=False
+            in_memory=True
         )
         return dataset
 
@@ -565,7 +671,7 @@ class ContrastiveLearningDataset:
         Here, we demonstrate a simple approach: rely on torchvision's ImageNet if available,
         or a custom approach. For demonstration, we use a placeholder.
         """
-        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 224)
+        image_size = 256 #self.args.get('dataset', {}).get('image_size', 224)
         print("[INFO] Loading ImageNet dataset (placeholder).")
 
         simclr_transform = self.get_simclr_pipeline_transform()
@@ -588,7 +694,7 @@ class ContrastiveLearningDataset:
         In your original code, you have an HDF5 with 'train', 'val', 'test' splits.
         We show a simplified single-split usage here.
         """
-        image_size = 256 #self.hyp.get('dataset', {}).get('image_size', 256)
+        image_size = 256 #self.args.get('dataset', {}).get('image_size', 256)
         dataset_file = f"{self.root_folder}/facescrub_256px.h5"
         print(f"[INFO] Loading facescrub dataset from {dataset_file}")
 
@@ -619,19 +725,166 @@ class ContrastiveLearningDataset:
         )
         return dataset
 
+
+class Ecoset(Dataset):
+    """
+    Example dataset class for Ecoset, similar to your original code.
+    Note: This class is simplified and only demonstrates reading data.
+    """
+
+    def __init__(self, split, dataset_path, transform=None, in_memory=False):
+        """
+        Args:
+            dataset_path (string): Path to the .h5 file
+            transform (callable, optional): Optional transforms to be applied on a sample.
+            in_memory (bool): Whether to preload the entire dataset into memory.
+        """
+        self.dataset_path = dataset_path
+        self.split = split
+        self.transform = transform
+        self.in_memory = in_memory
+
+        if self.in_memory:
+            # Load entire dataset into memory
+            with h5py.File(self.dataset_path, "r") as f:
+                self.images = torch.from_numpy(f[split]['data'][()]).permute(0, 3, 1, 2)
+                self.labels = torch.from_numpy(f[split]['labels'][()].astype(np.int64))
+        else:
+            # Lazy load
+            self.h5_ref = h5py.File(self.dataset_path, "r")[split]
+            self.images = self.h5_ref['data']
+            self.labels = self.h5_ref['labels']
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        if self.in_memory:
+            img = self.images[idx]
+            label = self.labels[idx]
+        else:
+            # On-the-fly access
+            img = torch.from_numpy(np.asarray(self.images[idx])).permute((2, 0, 1))
+            # label = torch.from_numpy(np.asarray(self.labels[idx])).long()
+            label = torch.from_numpy(np.asarray(self.labels[idx]).astype(np.int64))
+
+        if self.transform:
+            img = self.transform(img)
+
+        return img, label
+
+class COCOSplitH5Dataset(Dataset):
+    """
+    Dataset class for coco-split515.h5, with train/val/test splits.
+    Each split group contains:
+      - images           (N, 256, 256, 3)   uint8
+      - dg3_cover_mask   (N, 256, 256)      bool
+      - dg3_cover_probs  (N, 256, 256)      float16 or float32
+      - embeddings       (N, 768)           float32
+    """
+    def __init__(self, split, dataset_path, transform=None, in_memory=False):
+        """
+        Args:
+            split (str):      'train', 'val' or 'test'
+            dataset_path (str): Path to coco-split515.h5
+            transform (callable, optional): applied to images only
+            in_memory (bool): preload everything into RAM
+        """
+        self.split        = split
+        self.dataset_path = dataset_path
+        self.transform    = transform
+        self.in_memory    = in_memory
+
+        if self.in_memory:
+            # load entire split into RAM
+            with h5py.File(self.dataset_path, 'r') as f:
+                grp = f[self.split]
+                # (N,256,256,3) → (N,3,256,256)
+                self.images     = torch.from_numpy(grp['images'][()]) \
+                                          .permute(0, 3, 1, 2)
+                self.masks      = torch.from_numpy(grp['dg3_cover_mask'][()])
+                self.probs      = torch.from_numpy(grp['dg3_cover_probs'][()])
+                self.embeddings = torch.from_numpy(grp['embeddings'][()])
+        else:
+            # keep file open and index on-the-fly
+            self.h5_file      = h5py.File(self.dataset_path, 'r')
+            grp                = self.h5_file[self.split]
+            self.images_ref   = grp['images']
+            self.masks_ref    = grp['dg3_cover_mask']
+            self.probs_ref    = grp['dg3_cover_probs']
+            self.embeddings_ref = grp['embeddings']
+
+    def __len__(self):
+        return (
+            self.images.shape[0]
+            if self.in_memory
+            else self.images_ref.shape[0]
+        )
+
+    def __getitem__(self, idx):
+        if self.in_memory:
+            img       = self.images[idx]
+            mask      = self.masks[idx]
+            probs     = self.probs[idx]
+            embedding = self.embeddings[idx]
+        else:
+            # load single sample
+            img_np       = np.asarray(self.images_ref[idx])
+            mask_np      = np.asarray(self.masks_ref[idx])
+            probs_np     = np.asarray(self.probs_ref[idx])
+            embed_np     = np.asarray(self.embeddings_ref[idx])
+
+            img       = torch.from_numpy(img_np).permute(2, 0, 1)
+            mask      = torch.from_numpy(mask_np)
+            probs     = torch.from_numpy(probs_np)
+            embedding = torch.from_numpy(embed_np)
+
+        if self.transform:
+            img = self.transform(img)
+
+        # returns (image, mask, cover_probs, embedding)
+        return img, mask, probs, embedding
+
+    def __del__(self):
+        # clean up file handle if used
+        if not self.in_memory and hasattr(self, 'h5_file'):
+            self.h5_file.close()
+
+class Dataset_from_Dir(Dataset):
+    def __init__(self, root_dir, transform=None):
+        self.root_dir = root_dir
+        self.transform = transform
+        self.samples = []
+        for fname in sorted(os.listdir(root_dir)):
+            if fname.endswith('.jpg'):
+                label = fname.split('_')[0]  # e.g., 'boat' from 'boat_1_30.jpg'
+                self.samples.append((os.path.join(root_dir, fname), label))
+        self.class_to_idx = {cls_name: i for i, cls_name in enumerate(sorted(set(lbl for _, lbl in self.samples)))}
+    
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        img_path, label_str = self.samples[idx]
+        image = Image.open(img_path).convert('RGB')
+        label = self.class_to_idx[label_str]
+        if self.transform:
+            image = self.transform(image)
+        return image, label
+
 # ----------------------------------------------------------------
 # Example usage:
 # ----------------------------------------------------------------
 if __name__ == "__main__":
     # Suppose we want the 'ecoset_square256' dataset
-    hyp = {
+    args = {
         'dataset': {
             'name': 'stl10',
             'image_size': 96
         }
     }
-    data_obj = ContrastiveLearningDataset(root_folder="/share/klab/datasets/", hyp=hyp, n_views=2)
-    dataset = data_obj.get_dataset(hyp['dataset']['name'])  # This returns the train split, for example
+    data_obj = ContrastiveLearningDataset(root_folder="/share/klab/datasets/", args=args, n_views=2)
+    dataset = data_obj.get_dataset(args['dataset']['name'])  # This returns the train split, for example
 
     # Next steps: iterate, train, etc.
     for images, labels in dataset:

@@ -20,16 +20,20 @@ import torchvision.datasets as datasets
 import torchvision.models as torchvision_models
 from torch.utils.tensorboard import SummaryWriter
 
-import evd.simclr.builder
-import evd.simclr.loader
-import evd.simclr.optimizer
-import evd.utils
-import evd.models.vits
+import dvd.simclr.builder
+import dvd.simclr.loader
+import dvd.simclr.optimizer
+import dvd.utils
+import dvd.models.vits
 import logging
 from logging.config import fileConfig
 
-import evd.evd.development
-from evd.datasets.dataset_loader import ContrastiveLearningDataset
+#* For distributed training
+import torch.multiprocessing as mp
+mp.set_start_method('spawn', force=True)
+
+import dvd.dvd.development
+from dvd.datasets.dataset_loader import ContrastiveLearningDataset
 
 torchvision_model_names = sorted(
     name
@@ -71,7 +75,7 @@ parser.add_argument(
     help="number of data loading workers per node (default: 8)",
 )
 parser.add_argument(
-    "--epochs", default=100, type=int, metavar="N", help="number of total epochs to run"
+    "--epochs", default=150, type=int, metavar="N", help="number of total epochs to run"
 )
 parser.add_argument(
     "--start-epoch",
@@ -180,7 +184,7 @@ parser.add_argument(
 parser.add_argument('--development-strategy',
                     default='adult', 
                     type=str, 
-                    help='development strategy (default: evd)',
+                    help='development strategy (default: dvd)',
                     )
 parser.add_argument(
     "--time-order",
@@ -254,17 +258,17 @@ def main():
     args = parser.parse_args()
 
     # setup distributed training
-    evd.utils.init_distributed_mode(args)
-    evd.utils.fix_random_seeds(args.seed)
+    dvd.utils.init_distributed_mode(args)
+    dvd.utils.fix_random_seeds(args.seed)
     cudnn.benchmark = True
 
     #* setup logging library
-    fileConfig("evd/models/logging/config.ini")
+    fileConfig("dvd/models/logging/config.ini")
     logger = logging.getLogger()
     logger.disabled = True
 
     summary_writer = None
-    if evd.utils.is_main_process():
+    if dvd.utils.is_main_process():
         # setup tensorboard
         summary_writer = SummaryWriter()
 
@@ -282,14 +286,14 @@ def main():
     # create model
     logger.info("Creating model '{}'".format(args.arch))
     if args.arch.startswith("vit"):
-        model = evd.simclr.builder.SimCLR_ViT(
-            partial(evd.models.vits.__dict__[args.arch]),
+        model = dvd.simclr.builder.SimCLR_ViT(
+            partial(dvd.models.vits.__dict__[args.arch]),
             args.feat_dim,
             args.proj_mlp_dim,
             args.softmax_t,
         )
     else:
-        model = evd.simclr.builder.SimCLR_ResNet(
+        model = dvd.simclr.builder.SimCLR_ResNet(
             partial(torchvision_models.__dict__[args.arch], zero_init_residual=True),
             args.feat_dim,
             args.proj_mlp_dim,
@@ -307,7 +311,7 @@ def main():
     model = torch.nn.parallel.DistributedDataParallel(model)
 
     if args.optimizer == "lars":
-        optimizer = evd.simclr.optimizer.LARS(
+        optimizer = dvd.simclr.optimizer.LARS(
             model.parameters(),
             args.lr,
             weight_decay=args.weight_decay,
@@ -319,7 +323,7 @@ def main():
         )
 
     scaler = torch.cuda.amp.GradScaler()
-    if evd.utils.is_main_process():
+    if dvd.utils.is_main_process():
         stats_file = open(
             os.path.join(summary_writer.log_dir, "stats.txt"), "a", buffering=1
         )
@@ -362,14 +366,14 @@ def main():
     #     transforms.RandomHorizontalFlip(),
     #     transforms.RandomApply([transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)], p=0.8),
     #     transforms.RandomGrayscale(p=0.2),
-    #     transforms.RandomApply([evd.simclr.loader.GaussianBlur([0.1, 2.0])], p=0.5),
+    #     transforms.RandomApply([dvd.simclr.loader.GaussianBlur([0.1, 2.0])], p=0.5),
     #     transforms.ToTensor(),
     #     normalize,
     # ]
 
     # train_dataset = datasets.ImageFolder(
     #     traindir,
-    #     evd.simclr.loader.TwoCropsTransform(
+    #     dvd.simclr.loader.TwoCropsTransform(
     #         transforms.Compose(augmentations), transforms.Compose(augmentations)
     #     ),
     # )
@@ -407,13 +411,13 @@ def main():
             train_loader, model, optimizer, scaler, summary_writer, logger, epoch, args
         )
 
-        if evd.utils.is_main_process():  # only the first GPU saves checkpoint
+        if dvd.utils.is_main_process():  # only the first GPU saves checkpoint
             filename = "checkpoint.pth"
 
             if (epoch + 1) % args.save_checkpoint_every_epochs == 0:
                 filename = "checkpoint_%d.pth" % epoch
 
-            evd.utils.save_checkpoint(
+            dvd.utils.save_checkpoint(
                 {
                     "epoch": epoch + 1,
                     "arch": args.arch,
@@ -425,16 +429,16 @@ def main():
                 filename=os.path.join(summary_writer.log_dir, filename),
             )
 
-    if evd.utils.is_main_process():
+    if dvd.utils.is_main_process():
         summary_writer.close()
 
 
 def train(train_loader, model, optimizer, scaler, summary_writer, logger, epoch, args):
-    batch_time = evd.utils.AverageMeter("Time", ":6.3f")
-    data_time = evd.utils.AverageMeter("Data", ":6.3f")
-    learning_rates = evd.utils.AverageMeter("LR", ":.4e")
-    losses = evd.utils.AverageMeter("Loss", ":.4e")
-    progress = evd.utils.ProgressMeter(
+    batch_time = dvd.utils.AverageMeter("Time", ":6.3f")
+    data_time = dvd.utils.AverageMeter("Data", ":6.3f")
+    learning_rates = dvd.utils.AverageMeter("LR", ":.4e")
+    losses = dvd.utils.AverageMeter("Loss", ":.4e")
+    progress = dvd.utils.ProgressMeter(
         len(train_loader),
         [batch_time, data_time, learning_rates, losses],
         prefix="Epoch: [{}]".format(epoch),
@@ -447,7 +451,7 @@ def train(train_loader, model, optimizer, scaler, summary_writer, logger, epoch,
     iters_per_epoch = len(train_loader)
 
     # Generate age months curve to map batches to age months for EVD
-    age_months_curve = evd.evd.development.generate_age_months_curve(args.epochs, len(train_loader), args.months_per_epoch, 
+    age_months_curve = dvd.dvd.development.generate_age_months_curve(args.epochs, len(train_loader), args.months_per_epoch, 
                                                 mid_phase= args.time_order=='mid_phase', shuffle= args.time_order=='random', seed= args.seed)
 
     for i, (images, _) in enumerate(train_loader):
@@ -458,7 +462,7 @@ def train(train_loader, model, optimizer, scaler, summary_writer, logger, epoch,
         data_time.update(time.time() - end)
 
         # adjust learning rate
-        lr = evd.utils.adjust_learning_rate(optimizer, epoch + i / iters_per_epoch, args)
+        lr = dvd.utils.adjust_learning_rate(optimizer, epoch + i / iters_per_epoch, args)
         learning_rates.update(lr)
 
 
@@ -470,9 +474,9 @@ def train(train_loader, model, optimizer, scaler, summary_writer, logger, epoch,
             images[1] = images[1].cuda(args.gpu, non_blocking=True)
 
         # Experience across visual development
-        if args.development_strategy == 'evd':
+        if args.development_strategy == 'dvd':
             contrast_control_coeff = max(math.floor(age_months / args.decrease_contrast_threshold_spd) * 2, 1)
-            images = evd.evd.development.EarlyVisualDevelopmentTransformer().apply_fft_transformations(
+            images = dvd.dvd.development.EarlyVisualDevelopmentTransformer().apply_fft_transformations(
                 images,
                 age_months,
                 apply_blur=args.apply_blur, 
@@ -492,11 +496,11 @@ def train(train_loader, model, optimizer, scaler, summary_writer, logger, epoch,
             raise NotImplementedError(f"Development strategy {args.development_strategy} not implemented")
         
         # compute output
-        with torch.cuda.amp.autocast(True):
+        with torch.cuda.amp.autocast('cuda', enabled=True):
             loss = model(torch.cat(images))
 
         losses.update(loss.item(), images[0].size(0))
-        if evd.utils.is_main_process() and it % args.log_freq == 0:
+        if dvd.utils.is_main_process() and it % args.log_freq == 0:
             summary_writer.add_scalar("loss", loss.item(), it)
             metrics = progress.display(i)
             logger.info(metrics)

@@ -35,14 +35,14 @@ data_dir        = "/share/klab/datasets" # Directory with your data
 
 # Fixed Development Strategy
 img_size        = 256
-dev_strategies    = ["evd", "adult"][:1]
+dev_strategies    = ["dvd", "adult"][:1]
 time_order_val    = ["normal", "random", 'mid_phase'][0:1]
 n_months_list = [300][:1]
 
 #* Sweepable parameters for EVD
 months_per_epochs = [1, 2, 4, 8, 0.5, 3, 0.25][:4]
-contrast_thresh = [0.8, 0.4, 0.2, 0.1, 0.05, ][:1]
-contrast_spd    = [ 50, 150, 300, 100][:2]
+contrast_thresh = [0.8, 0.4, 0.2, 0.1, 0.05, ][:4]
+contrast_spd    = [ 100, 50, 150, 300, ][:1]
 
 # Ablation flags
 apply_blur_flags = [1][:1]

@@ -23,18 +23,18 @@ import torchvision.models as torchvision_models
 
 import wandb 
 
-import evd.simclr.builder
-import evd.simclr.loader
-import evd.simclr.optimizer
-import evd.utils
-import evd.models.vits
+import dvd.simclr.builder
+import dvd.simclr.loader
+import dvd.simclr.optimizer
+import dvd.utils
+import dvd.models.vits
 import logging
 from logging.config import fileConfig
 
-import evd.evd.development
-import evd.models.loader
-import evd.models.eval
-from evd.datasets.dataset_loader import SupervisedLearningDataset
+import dvd.dvd.development
+import dvd.models.loader
+import dvd.models.eval
+from dvd.datasets.dataset_loader import SupervisedLearningDataset
 
 torchvision_model_names = sorted(
     name
@@ -64,7 +64,7 @@ parser.add_argument(
     "--arch",
     metavar="ARCH",
     default="resnet50",
-    choices=model_names,
+    # choices=model_names, # Now also include models in timm
     help="model architecture: " + " | ".join(model_names) + " (default: resnet50)",
 )
 parser.add_argument(
@@ -170,13 +170,13 @@ parser.add_argument('--image-size', type=int, default=256)
 parser.add_argument('--development-strategy',
                     default='adult', 
                     type=str, 
-                    help='development strategy (default: evd)',
+                    help='development strategy (default: dvd)',
                     )
 parser.add_argument(
     "--time-order",
     default="normal",
     type=str,
-    choices=["normal", "mid_phase", "random"],
+    choices=["normal", "mid_phase", "random", "fully_random"],
     help="time order of the batches",
 )
 parser.add_argument(
@@ -201,6 +201,7 @@ parser.add_argument(
 # Ablations
 parser.add_argument('--apply_blur', type=int, default=1, help='Flag to apply blur to images')
 parser.add_argument('--apply_color', type=int, default=1, help='Flag to apply color changes')
+parser.add_argument('--apply_threshold_color', type=int, default=0, help='Flag to apply threshold color changes')
 parser.add_argument('--apply_contrast', type=int, default=1, help='Flag to apply contrast adjustments')
 
 # additional configs:
@@ -229,6 +230,12 @@ parser.add_argument(
     type=int,
     help="Resize images to 224x224",
 ) # args.resize_to_224
+parser.add_argument(
+    "--resize_to_256",
+    default=0,
+    type=int,
+    help="Resize images to 256x256",
+) # args.resize_to_256
 
 # no grayscale
 parser.add_argument(
@@ -237,6 +244,12 @@ parser.add_argument(
     type=int,
     help="apply grayscale transformation",
 ) # args.grayscale_aug
+parser.add_argument(
+    "--blur-aug",
+    default=1,
+    type=int,
+    help="apply blur transformation",
+) # args.blur_aug
 
 # best_acc1
 parser.add_argument("--best-acc1", default=0.0, type=float,
@@ -248,18 +261,18 @@ def setup_logging_and_wandb(args):
     Returns logger, wandb_run (or None), and log_dir.
     """
     # Initialize distributed training
-    evd.utils.init_distributed_mode(args)
-    evd.utils.fix_random_seeds(args.seed)
+    dvd.utils.init_distributed_mode(args)
+    dvd.utils.fix_random_seeds(args.seed)
     # If you really want bit-for-bit reproducibility (slower), enable:
     # cudnn.deterministic = True
     cudnn.benchmark = True # find the best algorithm to use for your hardware, but it can introduce some variability
 
     # Setup logging
-    fileConfig("evd/models/logging/config.ini")
+    fileConfig("dvd/models/logging/config.ini")
     logger = logging.getLogger()
     logger.disabled = True  # Will enable if main process
 
-    if args.development_strategy == 'evd':
+    if args.development_strategy == 'dvd':
         net_name = (
             f'{args.arch}_mpe{args.months_per_epoch}_alpha{args.contrast_threshold}'
             f'_dn{args.decrease_contrast_threshold_spd}_{args.dataset_name}'
@@ -270,9 +283,14 @@ def setup_logging_and_wandb(args):
     else:
         net_name = f'{args.arch}_{args.dataset_name}_{args.image_size}_{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}_seed_{args.seed}'
     
+    if not args.blur_aug:
+        net_name += f'_no_blur_aug' #* just debug
+    if args.apply_threshold_color:
+        net_name += f'_threshold_color'
+
     wandb_run = None
 
-    if evd.utils.is_main_process():
+    if dvd.utils.is_main_process():
         log_dir = f'logs/{net_name}'
         os.makedirs(log_dir, exist_ok=True)
 
@@ -293,6 +311,14 @@ def setup_logging_and_wandb(args):
 
     return logger, wandb_run, log_dir, net_name
 
+
+def stack_collate(batch):
+    imgs, labels = zip(*batch)
+    # imgs = [img if torch.is_tensor(img) else torch.tensor(img) for img in imgs]
+    labels = [lbl if torch.is_tensor(lbl) else torch.tensor(lbl) for lbl in labels]
+    return torch.stack(imgs,   dim=0), \
+           torch.stack(labels, dim=0)
+    
 def get_data_loaders(args):
     """
     Retrieves the training and validation datasets and wraps them into DataLoaders 
@@ -308,6 +334,10 @@ def get_data_loaders(args):
     print(f"train_sampler: {train_sampler}")
     print(f"val_sampler: {val_sampler}")
 
+    # 3) decide if we need our custom collate *only* for ImageNet
+    is_imagenet = (dataset_name == 'imagenet')
+    collate_fn  = stack_collate if is_imagenet else None
+
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size_per_gpu,
@@ -316,16 +346,18 @@ def get_data_loaders(args):
         pin_memory=True,
         sampler=train_sampler,
         drop_last=True,
+        **({'collate_fn': collate_fn} if collate_fn else {})
     )
 
-    val_loader = torch.utils.data.DataLoader(
+    val_loader =  torch.utils.data.DataLoader(
         val_dataset,
         batch_size=args.batch_size_per_gpu,
         shuffle=None,
         num_workers=args.workers,
         pin_memory=True,
         sampler=val_sampler,
-        drop_last=True,
+        drop_last=False,                 # <-- changed #* for small dataset, num/2<512 cannot drop
+        **({'collate_fn': collate_fn} if collate_fn else {})
     )
 
     return train_loader, val_loader, train_sampler, val_sampler
@@ -342,15 +374,15 @@ def train(
     epoch,
     args,
 ):
-    batch_time = evd.utils.AverageMeter("Time", ":6.3f")
-    data_time = evd.utils.AverageMeter("Data", ":6.3f")
-    learning_rates = evd.utils.AverageMeter("LR", ":.4e")
-    losses = evd.utils.AverageMeter("Loss", ":.4e")
-    top1 = evd.utils.AverageMeter("Acc@1", ":6.2f")
-    top5 = evd.utils.AverageMeter("Acc@5", ":6.2f")
+    batch_time = dvd.utils.AverageMeter("Time", ":6.3f")
+    data_time = dvd.utils.AverageMeter("Data", ":6.3f")
+    learning_rates = dvd.utils.AverageMeter("LR", ":.4e")
+    losses = dvd.utils.AverageMeter("Loss", ":.4e")
+    top1 = dvd.utils.AverageMeter("Acc@1", ":6.2f")
+    top5 = dvd.utils.AverageMeter("Acc@5", ":6.2f")
 
     # Progress meter display settings
-    progress = evd.utils.ProgressMeter(
+    progress = dvd.utils.ProgressMeter(
         len(train_loader),
         [batch_time, data_time, learning_rates, losses, top1, top5],
         prefix="Epoch: [{}]".format(epoch),
@@ -363,7 +395,7 @@ def train(
     iters_per_epoch = len(train_loader)
 
     # Generate age months curve to map batches to age months for EVD
-    age_months_curve = evd.evd.development.generate_age_months_curve(
+    age_months_curve = dvd.dvd.development.generate_age_months_curve(
         args.epochs,
         len(train_loader),
         args.months_per_epoch,
@@ -381,7 +413,7 @@ def train(
 
         # adjust learning rate
         if args.lr_scheduler == 'cosine':
-            lr = evd.utils.adjust_learning_rate(
+            lr = dvd.utils.adjust_learning_rate(
                 optimizer, epoch + i / iters_per_epoch, args
             )
             learning_rates.update(lr)
@@ -402,16 +434,19 @@ def train(
             target = target.cuda(args.gpu, non_blocking=True)
 
         # Experience across visual development
-        if args.development_strategy == "evd":
+        if args.development_strategy == "dvd":
             contrast_control_coeff = max(math.floor(age_months / args.decrease_contrast_threshold_spd) * 2, 1)
-            images = evd.evd.development.EarlyVisualDevelopmentTransformer().apply_fft_transformations(
+            images = dvd.dvd.development.EarlyVisualDevelopmentTransformer().apply_fft_transformations(
                 images,
                 age_months,
                 apply_blur=args.apply_blur, 
                 apply_color=args.apply_color, 
                 apply_contrast=args.apply_contrast,
                 contrast_threshold=args.contrast_threshold / contrast_control_coeff,
+                apply_threshold_color=args.apply_threshold_color,
                 image_size=args.image_size,
+                fully_random=(args.time_order == "fully_random"), # just for control models
+                age_months_curve= age_months_curve,
                 verbose=False,
             )
         elif args.development_strategy == "adult":
@@ -427,13 +462,13 @@ def train(
             loss = criterion(output, target)
 
         # measure accuracy and record loss
-        acc1, acc5 = evd.utils.accuracy(output, target, topk=(1, 5))
+        acc1, acc5 = dvd.utils.accuracy(output, target, topk=(1, 5))
         losses.update(loss.item(), images.size(0))
         top1.update(acc1[0], images.size(0))
         top5.update(acc5[0], images.size(0))
 
         # Log with wandb if main process
-        if evd.utils.is_main_process() and wandb_run is not None and it % args.log_freq == 0:
+        if dvd.utils.is_main_process() and wandb_run is not None and it % args.log_freq == 0:
             wandb.log(
                 {
                     "train/loss": loss.item(),
@@ -465,27 +500,28 @@ def main():
 
     # 1) Setup logging, distributed, and wandb
     logger, wandb_run, log_dir, net_name = setup_logging_and_wandb(args)
-    if evd.utils.is_main_process() and log_dir is not None:
-        evd.utils.save_config(args, os.path.join(log_dir, f"config.yaml")) # Saving config setup
+    if dvd.utils.is_main_process() and log_dir is not None:
+        dvd.utils.save_config(args, os.path.join(log_dir, f"config.yaml")) # Saving config setup
 
     # 2) Create and setup model
-    model, linear_keyword = evd.models.loader.create_model(args, logger)
-    evd.models.loader.load_pretrained_weights_if_any(args, model, linear_keyword)
+    model, linear_keyword = dvd.models.loader.create_model(args, logger)
+    dvd.models.loader.load_pretrained_weights_if_any(args, model, linear_keyword)
+    
     # Optionally compile the model (PyTorch 2.0+) to speed up training
     if hasattr(torch, "compile"):
         model = torch.compile(model)
 
     # 3) Build optimizer and FP16 scaler
-    model, optimizer, scaler = evd.models.loader.build_optimizer_and_scaler(args, model)
-    if evd.utils.is_main_process() and log_dir is not None:
-        evd.utils.save_initial_checkpoint(log_dir, args, model, optimizer, scaler, logger, net_name) 
+    model, optimizer, scaler = dvd.models.loader.build_optimizer_and_scaler(args, model)
+    if dvd.utils.is_main_process() and log_dir is not None:
+        dvd.utils.save_initial_checkpoint(log_dir, args, model, optimizer, scaler, logger, net_name) 
             
     # 4) Possibly resume checkpoint
-    if evd.utils.is_main_process() and log_dir is not None:
-        evd.models.loader.resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir)
+    if dvd.utils.is_main_process() and log_dir is not None:
+        dvd.models.loader.resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir)
 
     # Prepare to log stats if main process
-    if evd.utils.is_main_process() and log_dir is not None:
+    if dvd.utils.is_main_process() and log_dir is not None:
         stats_file = open(os.path.join(log_dir, "stats.txt"), "a", buffering=1)
         logger.info(" ".join(sys.argv))
         print(" ".join(sys.argv), file=stats_file)
@@ -495,10 +531,14 @@ def main():
         
     # 5) Get data loaders
     train_loader, val_loader, train_sampler, val_sampler = get_data_loaders(args)
+    print(f"len loaders : {len(train_loader)}  |  {len(val_loader)} |")
+    # import pdb;pdb.set_trace()
+    #TODO fix len(val_loader) is 0
+    
 
     # 6) Optionally only evaluate
     if args.evaluate:
-        evd.models.eval.validate(val_loader, model, criterion, epoch, args.gpu)
+        dvd.models.eval.validate(val_loader, model, criterion, epoch, args.gpu)
         return
 
     logger.info("Main components ready.")
@@ -509,7 +549,7 @@ def main():
 
     best_acc1 = args.best_acc1
     try:
-        criterion = evd.utils.get_loss_function(args)
+        criterion = dvd.utils.get_loss_function(args)
     except:
         criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing).cuda(args.gpu)
 
@@ -530,11 +570,11 @@ def main():
         )
 
         # evaluate on validation set
-        acc1, _ = evd.models.eval.validate(val_loader, model, criterion, epoch, args.gpu, wandb_run, logger)
+        acc1, _ = dvd.models.eval.validate(val_loader, model, criterion, epoch, args.gpu, wandb_run, logger)
         is_best = acc1 > best_acc1
         best_acc1 = max(acc1, best_acc1)
 
-        if evd.utils.is_main_process() and log_dir is not None:
+        if dvd.utils.is_main_process() and log_dir is not None:
             filename = "checkpoint.pth"
             if (epoch + 1) % args.save_checkpoint_every_epochs == 0:
                 filename = f"checkpoint_{epoch}.pth"
@@ -546,17 +586,17 @@ def main():
                     "optimizer": optimizer.state_dict(),
                     "scaler": scaler.state_dict(),
                 }
-            evd.utils.save_checkpoint(
+            dvd.utils.save_checkpoint(
                 checkpoint_dict,
                 is_best=is_best,
                 filename=os.path.join(log_dir, 'weights', filename),
             )
-            evd.utils.save_last_checkpoint(
+            dvd.utils.save_last_checkpoint(
                 checkpoint_dict,
                 filename=os.path.join(log_dir, 'weights', "checkpoint_last.pth"),
             )
 
-    if evd.utils.is_main_process():
+    if dvd.utils.is_main_process():
         wandb.finish()  
 
 

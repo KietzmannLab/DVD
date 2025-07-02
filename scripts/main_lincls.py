@@ -28,8 +28,8 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as torchvision_models
 
-from evd.models import vits
-from evd.datasets.dataset_loader import SupervisedLearningDataset
+from dvd.models import vits
+from dvd.datasets.dataset_loader import SupervisedLearningDataset
 
 torchvision_model_names = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -99,6 +99,13 @@ parser.add_argument('--pretrained', default='', type=str,
 # saving_name
 parser.add_argument('--saving-name', default='default', type=str,
                     help='name of the saving folder')
+# class_weights_json_path
+parser.add_argument(
+    "--class-weights-json-path",
+    default=None,
+    type=str,
+    help="path to class weights json file",
+)
 
 best_acc1 = 0
 
