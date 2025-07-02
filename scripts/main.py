@@ -187,7 +187,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--contrast_threshold",
-    default=0.05,
+    default=0.1,
     type=float,
     help="contrast drop speed factor (default: 0.05)",
 )

@@ -1,4 +1,4 @@
-# Early Visual Development Modeling
+# Adopting a human developmental visual diet (DVD) yields robust, shape-based AI vision models
 
 This repository provides code and utilities for simulating early visual development (EVD) in deep learning models. By modifying images in a manner consistent with how vision develops in early life, we aim to investigate how early experience may influence model performance and representation.
 
@@ -22,7 +22,7 @@ This repository provides code and utilities for simulating early visual developm
 4. Example of running a script:
 
     ```
-    torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10021 scripts/main.py --arch resnet50 --lr-scheduler fixed --lr 5e-5 --label-smoothing 0.1 --dataset-name texture2shape_miniecoset --development-strategy evd --time-order normal --months-per-epoch 2 --contrast_threshold 0.2 --decrease_contrast_threshold_spd 100 --epochs 300 --image-size 256 --batch-size 512 '/share/klab/datasets'
+    torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 --master_addr="localhost" --master_port=10021 scripts/main.py --arch resnet50 --lr-scheduler fixed --lr 5e-5 --label-smoothing 0.1 --dataset-name texture2shape_miniecoset --development-strategy evd --time-order normal --months-per-epoch 2 --contrast_threshold 0.1 --decrease_contrast_threshold_spd 150 --epochs 300 --image-size 256 --batch-size 512 '/share/klab/datasets'
 
     ```
     In this example:
