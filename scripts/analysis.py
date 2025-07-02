@@ -28,6 +28,9 @@ from dvd.analysis.degradation_robustness import DegradationRobustnessEvaluator
 ################################################################################
 #                           ANALYSIS CONFIGURATIONS
 ################################################################################
+#* Figure 1 is an illustration plot
+#* To plot development trajectory, check dvd.dvd.development.EarlyVisualDevelopmentTransformer
+#* in whihc you can 
 
 #* Figure 2 ACC & Shape bias
 EVALUATE_ACC = 1              # Fig1: Evaluate standard accuracy

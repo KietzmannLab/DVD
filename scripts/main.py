@@ -436,7 +436,7 @@ def train(
         # Experience across visual development
         if args.development_strategy == "dvd":
             contrast_control_coeff = max(math.floor(age_months / args.decrease_contrast_threshold_spd) * 2, 1)
-            images = dvd.dvd.development.EarlyVisualDevelopmentTransformer().apply_fft_transformations(
+            images = dvd.dvd.development.DVDTransformer().apply_fft_transformations(
                 images,
                 age_months,
                 apply_blur=args.apply_blur, 
