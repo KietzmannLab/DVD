@@ -280,7 +280,7 @@ _MODEL_NAME2PATH_RAW: Dict[str, str] = {
 
 # Convert symbolic directory names → full checkpoint paths
 MODEL_NAME2PATH: Dict[str, str | None] = {
-    name: f"/share/klab/lzejin/lzejin/codebase//P001_dvd_gpus/logs/{dir_}/weights/checkpoint_{EPOCHS[0]}.pth" if dir_ else None
+    name: f"/share/klab/lzejin/lzejin/codebase/P001_DVD/logs/shared_weights/{dir_}/weights/checkpoint_{EPOCHS[0]}.pth" if dir_ else None
     for name, dir_ in _MODEL_NAME2PATH_RAW.items()
 }
 
