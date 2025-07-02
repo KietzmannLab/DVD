@@ -1,4 +1,4 @@
-# Early Visual Development Modeling
+# Adopting a human developmental visual diet (DVD) yields robust, shape-based AI vision models
 
 This repository provides code and utilities for simulating early visual development (EVD) in deep learning models. By modifying images in a manner consistent with how vision develops in early life, we aim to investigate how early experience may influence model performance and representation.
 
