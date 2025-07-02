@@ -192,41 +192,34 @@ for _p in (ACC_SAVE_DIR, SHAPE_BIAS_PER_CLASS_SAVE_DIR, PLOT_DIR):
 # Option 1 – manually specify name → checkpoint directory mapping
 _MODEL_NAME2PATH_RAW: Dict[str, str] = {
     #* imagenet
-    "adult": "resnet50_imagenet_256_0.0001_dev_adult_seed_1",
+    # "adult": "resnet50_imagenet_256_0.0001_dev_adult_seed_1",
+    "resnet50_mpe4.0_alpha0.4_dn50.0": "resnet50_mpe4.0_alpha0.4_dn50.0_imagenet256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1",
+    "resnet50_mpe8.0_alpha0.8_dn50.0": "resnet50_mpe8.0_alpha0.8_dn50.0_imagenet256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1",
     "resnet50_mpe1.0_alpha0.1_dn100.0": "resnet50_mpe1.0_alpha0.1_dn100.0_imagenet256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1",
     "resnet50_mpe2.0_alpha0.1_dn150.0": "resnet50_mpe2.0_alpha0.1_dn150.0_imagenet256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1",
     "resnet50_mpe2.0_alpha0.2_dn100.0": "resnet50_mpe2.0_alpha0.2_dn100.0_imagenet256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1",
-    "resnet50_mpe4.0_alpha0.4_dn50.0": "resnet50_mpe4.0_alpha0.4_dn50.0_imagenet256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1",
-    "resnet50_mpe8.0_alpha0.8_dn50.0": "resnet50_mpe8.0_alpha0.8_dn50.0_imagenet256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1",
 
     # #* ecoset
     'resnet50_baseline':'resnet50_mpe2.0_alpha0.2_dn100.0_ecoset_square256256_0.0001_dev_adult_b1c1cs1_T_normal_seed_1',
     'resnet50_DVD-PP':'resnet50_mpe8.0_alpha0.2_dn50.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
     'resnet50_DVD-P':'resnet50_mpe4.0_alpha0.4_dn50.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
-    'resnet50_TVD-B': 'resnet50_mpe2.0_alpha0.1_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    'resnet50_DVD-B': 'resnet50_mpe2.0_alpha0.1_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
     'resnet50_DVD-S':'resnet50_mpe1.0_alpha0.1_dn100.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
     'resnet50_DVD-SS':'resnet50_mpe1.0_alpha0.1_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
 
     #* miniecoset
     'adult':'resnet50_texture2shape_miniecoset_256_0.0001_dev_adult_seed_1',
+    'resnet50_mpe4.0_alpha0.4_dn50.0':'resnet50_mpe4.0_alpha0.4_dn50.0_texture2shape_miniecoset256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    'resnet50_mpe2.0_alpha0.1_dn150.0':'resnet50_mpe2.0_alpha0.1_dn150.0_texture2shape_miniecoset256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    'resnet50_mpe1.0_alpha0.1_dn100.0':'resnet50_mpe1.0_alpha0.1_dn100.0_texture2shape_miniecoset256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
     'resnet50_mpe1.0_alpha0.2_dn150.0':'resnet50_mpe1.0_alpha0.2_dn150.0_texture2shape_miniecoset256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    
     'resnet50_mpe2.0_alpha0.1_dn100.0':'resnet50_mpe2.0_alpha0.1_dn100.0_texture2shape_miniecoset256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
     'resnet50_mpe4.0_alpha0.8_dn50.0':'resnet50_mpe4.0_alpha0.8_dn50.0_texture2shape_miniecoset256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
     'resnet50_mpe8.0_alpha0.8_dn100.0':'resnet50_mpe8.0_alpha0.8_dn100.0_texture2shape_miniecoset256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
-    
-    'resnet50_mpe1.0_alpha0.1_dn100.0':'resnet50_mpe1.0_alpha0.1_dn100.0_texture2shape_miniecoset256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
-    'resnet50_mpe2.0_alpha0.1_dn150.0':'resnet50_mpe2.0_alpha0.1_dn150.0_texture2shape_miniecoset256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
     'resnet50_mpe2.0_alpha0.2_dn100.0':'resnet50_mpe2.0_alpha0.2_dn100.0_texture2shape_miniecoset256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
-    'resnet50_mpe4.0_alpha0.4_dn50.0':'resnet50_mpe4.0_alpha0.4_dn50.0_texture2shape_miniecoset256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
     'resnet50_mpe8.0_alpha0.8_dn50.0':'resnet50_mpe8.0_alpha0.8_dn50.0_texture2shape_miniecoset256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
     
-    #* multiple seeds | TODO | Not finished
-    'adult_seed_1':'resnet50_mpe2.0_alpha0.2_dn100.0_ecoset_square256256_0.0001_dev_adult_b1c1cs1_T_normal_seed_1',
-    'adult_seed_2':'resnet50_mpe2.0_alpha0.2_dn100.0_ecoset_square256256_0.0001_dev_adult_b1c1cs1_T_normal_seed_2',
-    'adult_seed_3':'resnet50_mpe2.0_alpha0.2_dn100.0_ecoset_square256256_0.0001_dev_adult_b1c1cs1_T_normal_seed_3',
-    "mpe2.0_alpha0.1_dn150.0_seed_1": 'resnet50_mpe2.0_alpha0.1_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
-    "mpe2.0_alpha0.1_dn150.0_seed_2": 'resnet50_mpe2.0_alpha0.1_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_2',
-    "mpe2.0_alpha0.1_dn150.0_seed_3": 'resnet50_mpe2.0_alpha0.1_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_3',
 
     ##* ablation | based on DVD-B
     'resnet50_mpe2.0_alpha0.1_dn150.0_b1c1cs1':'resnet50_mpe2.0_alpha0.1_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
@@ -254,6 +247,14 @@ _MODEL_NAME2PATH_RAW: Dict[str, str] = {
     'deit_base_patch16_224_DVD_B': "deit_base_patch16_224_mpe2.0_alpha0.1_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1", 
     'vit_b_16_baseline': "vit_b_16_ecoset_square256_256_0.0001_dev_adult_seed_1", 
     'vit_b_16_DVD_B': "vit_b_16_mpe2.0_alpha0.1_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1",
+
+    #* multiple seeds | TODO train
+    'adult_seed_1':'resnet50_mpe2.0_alpha0.2_dn100.0_ecoset_square256256_0.0001_dev_adult_b1c1cs1_T_normal_seed_1',
+    'adult_seed_2':'resnet50_mpe2.0_alpha0.2_dn100.0_ecoset_square256256_0.0001_dev_adult_b1c1cs1_T_normal_seed_2',
+    'adult_seed_3':'resnet50_mpe2.0_alpha0.2_dn100.0_ecoset_square256256_0.0001_dev_adult_b1c1cs1_T_normal_seed_3',
+    "mpe2.0_alpha0.1_dn150.0_seed_1": 'resnet50_mpe2.0_alpha0.1_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_1',
+    "mpe2.0_alpha0.1_dn150.0_seed_2": 'resnet50_mpe2.0_alpha0.1_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_2',
+    "mpe2.0_alpha0.1_dn150.0_seed_3": 'resnet50_mpe2.0_alpha0.1_dn150.0_ecoset_square256256_0.0001_dev_evd_b1c1cs1_T_normal_seed_3',
 
     #* No blurring aug for more fair robustness evaluation
     'ecoset_adult_no_blur':'resnet50_ecoset_square256_256_0.0001_dev_adult_seed_1_no_blur_aug',
@@ -341,7 +342,7 @@ def _prepare_model(arch: str, ckpt_path: str , device: torch.device) -> torch.nn
     args.dataset_name = DATASET_TRAINED_ON
     model, _ = dvd.models.loader.create_model(args)
     if ckpt_path and Path(ckpt_path).is_file():
-        dvd.models.loader.load_checkpoint(model, model_path=ckpt_path, log_dir=None, args=args)
+        dvd.models.loader.load_checkpoint(model, model_path=ckpt_path, log_dir=None, args=None)
     model.to(device)
     model.eval()
     return model
@@ -379,171 +380,171 @@ def evaluate_models() -> None:
                     global IMAGE_SIZE  # noqa: PLW0603 – explicit global update
                     IMAGE_SIZE = 224
 
-            try:
-                # ----------------------------------------------------------
-                # 1) Standard accuracy (Top-1 / Top-5)
-                # ----------------------------------------------------------
-                if EVALUATE_ACC or any(
-                    (
-                        EVALUATE_ADV_ROBUSTNESS,
-                        EVALUATE_DEGRADATION_ROBUSTNESS,
-                        FEATURE_ATRRIBUTION_VISUALIZE,
-                    )
-                ):
-                    model = _prepare_model(arch_name, ckpt_path, device)
+            # try:
+            # ----------------------------------------------------------
+            # 1) Standard accuracy (Top-1 / Top-5)
+            # ----------------------------------------------------------
+            if EVALUATE_ACC or any(
+                (
+                    EVALUATE_ADV_ROBUSTNESS,
+                    EVALUATE_DEGRADATION_ROBUSTNESS,
+                    FEATURE_ATRRIBUTION_VISUALIZE,
+                )
+            ):
+                model = _prepare_model(arch_name, ckpt_path, device)
 
+            if EVALUATE_ACC:
+                criterion = (
+                    nn.CrossEntropyLoss().to(device)
+                    if device.type == "cuda"
+                    else nn.CrossEntropyLoss()
+                )
+                top1, top5 = validate(test_loader, model, criterion, epoch, IMAGE_SIZE)
+                print(f"  ↳ Epoch {epoch}: Top-1 {top1:.2f} | Top-5 {top5:.2f}")
+
+                # Save to dataframe and CSV
+                acc_df.loc[len(acc_df)] = [model_name, epoch, float(top1), float(top5)]
+                acc_df.to_csv(ACC_SAVE_DIR / f"{analysis_id}acc.csv", index=False)
+
+            # ----------------------------------------------------------
+            # 2) Shape bias
+            # ----------------------------------------------------------
+            if EVALUATE_BIAS:
+                model_type_for_eval = f"{arch_name}_ours"
+                shape_bias, sb_per_class, classes, shape_accs, texture_accs = get_shape_bias(
+                    model_type_for_eval,
+                    evaluation=True,
+                    load_checkpoint_path=ckpt_path,
+                    dataset_trained_on=DATASET_TRAINED_ON,
+                    image_size=IMAGE_SIZE,
+                    data_normalization_type="0-1",
+                    matrixplot_savedir=None,
+                )
+                print(f"  ↳ Epoch {epoch}: Shape-bias {shape_bias:.2f}")
+
+                row = {
+                    "model_name": model_name,
+                    "model_type": model_type_for_eval,
+                    "epoch": epoch,
+                    "shape_bias": shape_bias,
+                    "median_shape_bias": np.median(sb_per_class),
+                    "timepoint": 0,
+                    "shape_acc": shape_accs,
+                    "texture_acc": texture_accs,
+                    "shape_bias_per_class": sb_per_class,
+                }
                 if EVALUATE_ACC:
-                    criterion = (
-                        nn.CrossEntropyLoss().to(device)
-                        if device.type == "cuda"
-                        else nn.CrossEntropyLoss()
-                    )
-                    top1, top5 = validate(test_loader, model, criterion, epoch, IMAGE_SIZE)
-                    print(f"  ↳ Epoch {epoch}: Top-1 {top1:.2f} | Top-5 {top5:.2f}")
+                    row.update({"top1": float(top1), "top5": float(top5)})
 
-                    # Save to dataframe and CSV
-                    acc_df.loc[len(acc_df)] = [model_name, epoch, float(top1), float(top5)]
-                    acc_df.to_csv(ACC_SAVE_DIR / f"{analysis_id}acc.csv", index=False)
+                shape_bias_across_time_df.loc[len(shape_bias_across_time_df)] = row
+                shape_bias_csv = SHAPE_BIAS_SAVE_DIR / f"{analysis_id}shape_bias.csv"
+                shape_bias_across_time_df.to_csv(shape_bias_csv, index=False)
 
-                # ----------------------------------------------------------
-                # 2) Shape bias
-                # ----------------------------------------------------------
-                if EVALUATE_BIAS:
-                    model_type_for_eval = f"{arch_name}_ours"
-                    shape_bias, sb_per_class, classes, shape_accs, texture_accs = get_shape_bias(
-                        model_type_for_eval,
-                        evaluation=True,
-                        load_checkpoint_path=ckpt_path,
-                        dataset_trained_on=DATASET_TRAINED_ON,
-                        image_size=IMAGE_SIZE,
-                        data_normalization_type="0-1",
-                        matrixplot_savedir=None,
-                    )
-                    print(f"  ↳ Epoch {epoch}: Shape-bias {shape_bias:.2f}")
-
-                    row = {
-                        "model_name": model_name,
-                        "model_type": model_type_for_eval,
-                        "epoch": epoch,
-                        "shape_bias": shape_bias,
-                        "median_shape_bias": np.median(sb_per_class),
-                        "timepoint": 0,
-                        "shape_acc": shape_accs,
-                        "texture_acc": texture_accs,
+                # Save per-class bias
+                per_class_df = pd.DataFrame(
+                    {
+                        "class_name": classes,
                         "shape_bias_per_class": sb_per_class,
                     }
-                    if EVALUATE_ACC:
-                        row.update({"top1": float(top1), "top5": float(top5)})
+                )
+                pc_dir = SHAPE_BIAS_PER_CLASS_SAVE_DIR / model_name
+                pc_dir.mkdir(parents=True, exist_ok=True)
+                per_class_df.to_csv(
+                    pc_dir / f"shape_bias_per_class_epoch_{epoch}.csv", index=False
+                )
 
-                    shape_bias_across_time_df.loc[len(shape_bias_across_time_df)] = row
-                    shape_bias_csv = SHAPE_BIAS_SAVE_DIR / f"{analysis_id}shape_bias.csv"
-                    shape_bias_across_time_df.to_csv(shape_bias_csv, index=False)
+            # ----------------------------------------------------------
+            # 3) Feature-attribution visualisation
+            # ----------------------------------------------------------
+            if FEATURE_ATRRIBUTION_VISUALIZE:
+                models_dict_for_feature_atrribution[f"{model_name}_ep{epoch}"] = model
 
-                    # Save per-class bias
-                    per_class_df = pd.DataFrame(
-                        {
-                            "class_name": classes,
-                            "shape_bias_per_class": sb_per_class,
-                        }
+            # ----------------------------------------------------------
+            # 4) Adversarial robustness evaluation
+            # ----------------------------------------------------------
+            if EVALUATE_ADV_ROBUSTNESS:
+                evaluator = AdversarialRobustnessEvaluator(test_loader)
+                evaluator.evaluate(
+                    model,
+                    attack_subset=SELECTED_ADV_ATTACKS_NAMES,
+                    model_name=model_name,
+                    epoch=epoch,
+                    log_dir=ADV_ROBUSTNESS_RESULTS_SAVE_DIR,
+                )
+
+            # ----------------------------------------------------------
+            # 5) Degradation robustness evaluation
+            # ----------------------------------------------------------
+            if EVALUATE_DEGRADATION_ROBUSTNESS:
+                degr_eval = DegradationRobustnessEvaluator(
+                    test_loader,
+                    blur_loader_fn=get_blur_loader,
+                    distortion_loader_fn=get_distortion_loader,
+                )
+                criterion = nn.CrossEntropyLoss().to(device)
+
+                if EVALUATE_VARIOUS_DEGRADTION:
+                    clean_result = degr_eval.evaluate_clean(
+                        test_loader, model, criterion, epoch, IMAGE_SIZE
                     )
-                    pc_dir = SHAPE_BIAS_PER_CLASS_SAVE_DIR / model_name
-                    pc_dir.mkdir(parents=True, exist_ok=True)
-                    per_class_df.to_csv(
-                        pc_dir / f"shape_bias_per_class_epoch_{epoch}.csv", index=False
+                    distortions = degr_eval.evaluate_distortions(
+                        model, _load_common_config(), criterion, epoch, IMAGE_SIZE
+                    )
+                    df = pd.concat(
+                        [
+                            degr_eval.results_to_dataframe(clean_result, model_name, "accuracy"),
+                            degr_eval.results_to_dataframe(distortions, model_name, "accuracy"),
+                        ],
+                        ignore_index=True,
+                    )
+                    df.to_csv(
+                        DEGRADATION_RESULTS_SAVE_DIR / f"{model_name}_epoch{epoch}.csv",
+                        index=False,
                     )
 
-                # ----------------------------------------------------------
-                # 3) Feature-attribution visualisation
-                # ----------------------------------------------------------
-                if FEATURE_ATRRIBUTION_VISUALIZE:
-                    models_dict_for_feature_atrribution[f"{model_name}_ep{epoch}"] = model
-
-                # ----------------------------------------------------------
-                # 4) Adversarial robustness evaluation
-                # ----------------------------------------------------------
-                if EVALUATE_ADV_ROBUSTNESS:
-                    evaluator = AdversarialRobustnessEvaluator(test_loader)
-                    evaluator.evaluate(
-                        model,
-                        attack_subset=SELECTED_ADV_ATTACKS_NAMES,
-                        model_name=model_name,
-                        epoch=epoch,
-                        log_dir=ADV_ROBUSTNESS_RESULTS_SAVE_DIR,
-                    )
-
-                # ----------------------------------------------------------
-                # 5) Degradation robustness evaluation
-                # ----------------------------------------------------------
-                if EVALUATE_DEGRADATION_ROBUSTNESS:
-                    degr_eval = DegradationRobustnessEvaluator(
+                if EVALUATE_BLUR_DEGRADATIONN:
+                    subtype = "face" if "face" in DATASET_TRAINED_ON else "object"
+                    clean = degr_eval.evaluate_clean(
                         test_loader,
-                        blur_loader_fn=get_blur_loader,
-                        distortion_loader_fn=get_distortion_loader,
+                        model,
+                        criterion,
+                        epoch,
+                        IMAGE_SIZE,
+                        eval_subset_classes=True,
+                        test_type=subtype,
                     )
-                    criterion = nn.CrossEntropyLoss().to(device)
+                    blur = degr_eval.evaluate_blur(
+                        model,
+                        _load_common_config(),
+                        criterion,
+                        epoch,
+                        IMAGE_SIZE,
+                        eval_subset_classes=True,
+                        test_type=subtype,
+                    )
+                    df_blur = pd.concat(
+                        [
+                            degr_eval.results_to_dataframe(clean, model_name, "accuracy"),
+                            degr_eval.results_to_dataframe(blur, model_name, "accuracy"),
+                        ],
+                        ignore_index=True,
+                    )
+                    blur_dir = DEGRADATION_RESULTS_SAVE_DIR / "blur_degradation"
+                    blur_dir.mkdir(exist_ok=True)
+                    df_blur.to_csv(
+                        blur_dir / f"{DATASET_TRAINED_ON}_blur_{model_name}_epoch{epoch}.csv",
+                        index=False,
+                    )
 
-                    if EVALUATE_VARIOUS_DEGRADTION:
-                        clean_result = degr_eval.evaluate_clean(
-                            test_loader, model, criterion, epoch, IMAGE_SIZE
-                        )
-                        distortions = degr_eval.evaluate_distortions(
-                            model, _load_common_config(), criterion, epoch, IMAGE_SIZE
-                        )
-                        df = pd.concat(
-                            [
-                                degr_eval.results_to_dataframe(clean_result, model_name, "accuracy"),
-                                degr_eval.results_to_dataframe(distortions, model_name, "accuracy"),
-                            ],
-                            ignore_index=True,
-                        )
-                        df.to_csv(
-                            DEGRADATION_RESULTS_SAVE_DIR / f"{model_name}_epoch{epoch}.csv",
-                            index=False,
-                        )
+            # ----------------------------------------------------------
+            # 6) Activation extraction (optional)
+            # ----------------------------------------------------------
+            # To extract activations, set EXTRACT_ACTS flag in config-section
+            # and adapt EXTRACT_ACTS_DATASETS / ACTS_RDM_SAVE_DIR.
 
-                    if EVALUATE_BLUR_DEGRADATIONN:
-                        subtype = "face" if "face" in DATASET_TRAINED_ON else "object"
-                        clean = degr_eval.evaluate_clean(
-                            test_loader,
-                            model,
-                            criterion,
-                            epoch,
-                            IMAGE_SIZE,
-                            eval_subset_classes=True,
-                            test_type=subtype,
-                        )
-                        blur = degr_eval.evaluate_blur(
-                            model,
-                            _load_common_config(),
-                            criterion,
-                            epoch,
-                            IMAGE_SIZE,
-                            eval_subset_classes=True,
-                            test_type=subtype,
-                        )
-                        df_blur = pd.concat(
-                            [
-                                degr_eval.results_to_dataframe(clean, model_name, "accuracy"),
-                                degr_eval.results_to_dataframe(blur, model_name, "accuracy"),
-                            ],
-                            ignore_index=True,
-                        )
-                        blur_dir = DEGRADATION_RESULTS_SAVE_DIR / "blur_degradation"
-                        blur_dir.mkdir(exist_ok=True)
-                        df_blur.to_csv(
-                            blur_dir / f"{DATASET_TRAINED_ON}_blur_{model_name}_epoch{epoch}.csv",
-                            index=False,
-                        )
-
-                # ----------------------------------------------------------
-                # 6) Activation extraction (optional)
-                # ----------------------------------------------------------
-                # To extract activations, set EXTRACT_ACTS flag in config-section
-                # and adapt EXTRACT_ACTS_DATASETS / ACTS_RDM_SAVE_DIR.
-
-            except Exception as exc:  # pylint: disable=broad-except
-                import pdb;pdb.set_trace()
-                print(f"  [WARN] Skipping {model_name} @ epoch {epoch}: {exc}")
+            # except Exception as exc:  # pylint: disable=broad-except
+                # import pdb;pdb.set_trace()
+                # print(f"  [WARN] Skipping {model_name} @ epoch {epoch}: {exc}")
 
     # -----------------------------------------------------------------------
     # Post-processing – plotting and visualisation
