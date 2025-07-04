@@ -169,13 +169,13 @@ parser.add_argument(
     help="number of months per epoch",
 )
 parser.add_argument(
-    "--contrast_threshold",
+    "--contrast_amplitude_beta",
     default=0.1,
     type=float,
-    help="contrast drop speed factor (default: 0.05)",
+    help="beta in the paper, determines the base amplitude threshold in the frequency domain to map the initial contrast sensitivity in the spatial domain at birth,",
 )
 parser.add_argument(
-    "--decrease_contrast_threshold_spd",
+    "--contrast_amplitude_lambda",
     default=100,
     type=float,
     help="decrease contrast drop speed (default: 100)",
@@ -257,8 +257,8 @@ def setup_logging_and_wandb(args):
 
     if args.development_strategy == 'dvd':
         net_name = (
-            f'{args.arch}_mpe{args.months_per_epoch}_alpha{args.contrast_threshold}'
-            f'_dn{args.decrease_contrast_threshold_spd}_{args.dataset_name}'
+            f'{args.arch}_mpe{args.months_per_epoch}_alpha{args.contrast_amplitude_beta}'
+            f'_dn{args.contrast_amplitude_lambda}_{args.dataset_name}'
             f'{args.image_size}_{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}'
             f'_b{args.apply_blur}c{args.apply_color}cs{args.apply_contrast}'
             f'_T_{args.time_order}_seed_{args.seed}'
@@ -377,7 +377,7 @@ def train(
     end = time.time()
     iters_per_epoch = len(train_loader)
 
-    # Generate age months curve to map batches to age months for EVD
+    # Generate age months curve to map batches to age months for DVD
     age_months_curve = dvd.dvd.development.generate_age_months_curve(
         args.epochs,
         len(train_loader),
@@ -407,7 +407,7 @@ def train(
                 f"Development strategy {args.lr_scheduler} not implemented"
             )
 
-        # Get age in months (for EVD transformations) | epoch start from 1 so -1
+        # Get age in months (for DVD transformations) | epoch start from 1 so -1
         age_months = age_months_curve[(epoch -0) * len(train_loader) + i]
         
 
@@ -418,14 +418,14 @@ def train(
 
         # Experience across visual development
         if args.development_strategy == "dvd":
-            contrast_control_coeff = max(math.floor(age_months / args.decrease_contrast_threshold_spd) * math.floor(math.e), 1) # instead of using * math.e, you can also just use math.floor(math.e)=2
             images = dvd.dvd.development.DVDTransformer().apply_fft_transformations(
                 images,
                 age_months,
                 apply_blur=args.apply_blur, 
                 apply_color=args.apply_color, 
                 apply_contrast=args.apply_contrast,
-                contrast_threshold=args.contrast_threshold / contrast_control_coeff,
+                contrast_amplitude_beta=args.contrast_amplitude_beta,
+                contrast_amplitude_lambda = args.contrast_amplitude_lambda,
                 apply_threshold_color=args.apply_threshold_color,
                 image_size=args.image_size,
                 fully_random=(args.time_order == "fully_random"), # just for control models
