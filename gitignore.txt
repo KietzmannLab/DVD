@@ -1,0 +1,47 @@
+*.egg-info
+slurm_train.py
+slurm_submit_job.sh
+setup_env*s
+./save_dir/
+h100*
+./save_dir/
+./save_dir/*
+.__pycache__/
+./wandb/
+wandb/*
+./dataset/
+./dataset/*
+*/__pycache__/
+*/__pycache__/*
+/save_dir_shared/
+save_dir_shared/*
+./data
+./data/*
+./docs
+./docs/*
+./results
+./results/*
+./tests
+./tests/*
+data/
+data/*
+docs/
+results/
+tests/
+logs/
+logs/*
+*__pycache__*
+checkpoint_best.pth
+blurring4texture2shape1file.git
+./scripts/early_visual_development_train
+runs/
+checkpoints/
+checkpoints/*
+*deprecated*
+
+# Ignore everything in scripts/
+scripts/*
+# But keep main.py
+!scripts/main.py
+# Ignore the dvd/analysis directory 
+evd/analysis/
