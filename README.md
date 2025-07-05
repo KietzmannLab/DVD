@@ -2,34 +2,20 @@
 
 # Adopting a Human Developmental Visual Diet (DVD) diet yields robust, shape-based AI vision
 
-A **plug-and-play training curriculum* that “ages” each image to mimic the developing optics and neural sensitivities of the human visual system from immature newborn vision to mature adulthood. 
+A *plug-and-play training curriculum* that “ages” each image to mimic the developing optics and neural sensitivities of the human visual system from immature newborn vision to mature adulthood.
+
 ---
 
-## 🔎 Summary  
-
-Despite years of research and scaling, a stark misalignment between human and AI vision remains. Unlike humans, AI systems over-rely on texture rather than shape, are fragile to distortions, vulnerable to adversarial attacks, and struggle to recognize abstract shapes in context. We trace this gap to a key difference in upbringing: humans are born with vision that is blurry, low in contrast sensitivity, and desaturated—qualities that gradually mature over time. By quantifying these developmental trajectories and training networks on them as a **Developmental Visual Diet (DVD)**, we achieve shape-based recognition performance that surpasses large VLMs trained on orders of magnitude more data. Our findings show that robust AI vision depends not just on how much a model learns, but how it learns.
----
-
-## 📜 Main ideas 
+## 1 Why developmental visual diet (DVD)?
 
 * Human visual systems start from 'immature', while currently AI training is mianly instant with high-fidelity.  
 * We fit psychophysical data for **visual acuity**, **contrast sensitivity**, and **chromatic sensitivity** from 0 m-25 y.  
 * A differentiable pipeline applies matching visual acuity, contrast sensitivity, and chromatic sensitivity *on-the-fly*.  
 * Guiding AI vision through this DVD yields models that closely align with human robust vision across key hallmarks: 1) near-human shape bias, 2) greater corruption robustness, 3) improved adversarial resilience, 4) Abstract shape recognition beyond tested VLMs (e.g. ChatGPT-4o, Gemini 2.0 Flash, and LLaMA-4-Scout)
 
----
-
-## 📈 Developmental Visual Trajectories  
+### 📈 Developmental Visual Trajectories  
 
 ![Age-dependent visual development curves](./assets/DVD_trajectories.png)
-
----
-
-## 1 Why developmental visual diet (DVD)?
-
-* **FFT-based contrast gating** — fast & differentiable.  
-* **Curriculum scheduling** — chronological, reverse, or fully random.  
-* **Zero-friction API** — a single `DVDTransformer` in any dataset.
 
 ---
 
