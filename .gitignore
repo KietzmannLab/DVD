@@ -38,3 +38,10 @@ runs/
 checkpoints/
 checkpoints/*
 *deprecated*
+
+# Ignore everything in scripts/
+scripts/*
+# But keep main.py
+!scripts/main.py
+# Ignore the dvd/analysis directory 
+dvd/analysis/
