@@ -157,9 +157,9 @@ parser.add_argument('--development-strategy',
                     )
 parser.add_argument(
     "--time-order",
-    default="normal",
+    default="chronological",
     type=str,
-    choices=["normal", "mid_phase", "random", "fully_random"],
+    choices=["chronological", "mid_phase", "random", "fully_random"],
     help="time order of the batches",
 )
 parser.add_argument(

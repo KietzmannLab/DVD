@@ -321,7 +321,7 @@ if __name__ == "__main__":
     import torch
 
     # Local import or replace with the actual class definition
-    # from dvd.dvd.development import DVDTransformer  # Replace or comment out if defined locally
+    from dvd.dvd.development import DVDTransformer  # Replace or comment out if defined locally
 
     # Configuration (manually assigned)
     AGES = [1, 4, 16, 64, 256][:]  # in months
