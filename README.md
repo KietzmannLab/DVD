@@ -31,10 +31,9 @@ print("DVD version:", dvd.__version__, "| CUDA =", torch.cuda.is_available())
 PY
 ```
 
-⸻
+## 3 Quick demo - aging images
 
-## 3 Quick demo — ageing images
-
+```python
 from pathlib import Path
 from typing import List
 import matplotlib.pyplot as plt
@@ -85,15 +84,14 @@ def grid_demo(image_paths: List[Path], out_file: Path) -> None:
     out_file.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_file, dpi=200)
     print(f"Demo saved to {out_file.resolve()}")
-
+    
 # Run
 grid_demo(IMAGE_PATHS, OUTPUT_PATH)
-
-
-⸻
+```
 
 ## 4 Training with DVD
 
+```bash
 torchrun --nproc_per_node=1 scripts/main.py \
   --dataset-name ecoset --data-root /datasets \
   --arch resnet50 --epochs 300 --batch-size 512 --image-size 256 \
@@ -101,19 +99,20 @@ torchrun --nproc_per_node=1 scripts/main.py \
   --development_strategy dvd --months_per_epoch 2 --time_order chronological \
   --apply_blur --apply_color --apply_contrast \
   --contrast_amplitude_beta 0.1 --contrast_amplitude_lambda 150
+```
 
-Flag	Purpose
---development_strategy	dvd (full curriculum) or adult (control).
---months_per_epoch	Virtual ageing per epoch (smaller = finer).
---time_order	chronological, fully_random.
---apply_*	Toggle acuity / colour / contrast stages.
---contrast_amplitude_*	Fine-tune frequency thresholding.
+| Flag                     | Purpose                                             |
+|--------------------------|-----------------------------------------------------|
+| `--development_strategy` | `dvd` (full curriculum) or `adult` (control).       |
+| `--months_per_epoch`     | Virtual ageing per epoch (smaller = finer).         |
+| `--time_order`           | `chronological`, `fully_random`.                    |
+| `--apply_*`              | Toggle acuity / colour / contrast stages.           |
+| `--contrast_amplitude_*` | Fine-tune frequency thresholding.                   |
 
 
-⸻
+## 5 Core API
 
-5 Core API
-
+```python
 from dvd.dvd.development import DVDTransformer
 dvdt = DVDTransformer()
 
@@ -136,15 +135,15 @@ images_aged = dvdt.apply_fft_transformations(
     image_size=224,
     fully_random=False,
 )
+```
 
-⸻
+## 6 Citation
 
-8 Citation
-
+```bash
 @article{li2025dvd,
   title   = {Adopting a human developmental visual diet yields robust, shape-based AI vision models},
   author  = {Zejin Lu, Sushrut Thorat, Radoslaw M Cichy & Tim C Kietzmann},
   journal = {Placeholders – will be filled once DOI is live.)},
   year    = {2025}
-}
-
+} -->
+```
