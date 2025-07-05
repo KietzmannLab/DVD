@@ -1,6 +1,6 @@
 ![DVD pipeline overview](./assets/DVD_pipeline.png)
 
-# Adopting a Human Developmental Visual Diet (DVD) diet yields robust, shape-based AI vision
+# Adopting a human developmental visual diet (DVD) diet yields robust, shape-based AI vision
 
 A *plug-and-play training curriculum* that “ages” each image to mimic the developing optics and neural sensitivities of the human visual system from immature newborn vision to mature adulthood.
 
