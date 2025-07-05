@@ -6,12 +6,16 @@ A *plug-and-play training curriculum* that “ages” each image to mimic the de
 
 ---
 
-## 1 Why developmental visual diet (DVD)?
+## 1 Why Developmental Visual Diet (DVD)?
 
-* Human visual systems start from 'immature', while currently AI training is mianly instant with high-fidelity.  
-* We fit psychophysical data for **visual acuity**, **contrast sensitivity**, and **chromatic sensitivity** from 0 m-25 y.  
-* A differentiable pipeline applies matching visual acuity, contrast sensitivity, and chromatic sensitivity *on-the-fly*.  
-* Guiding AI vision through this DVD yields models that closely align with human robust vision across key hallmarks: 1) near-human shape bias, 2) greater corruption robustness, 3) improved adversarial resilience, 4) Abstract shape recognition beyond tested VLMs (e.g. ChatGPT-4o, Gemini 2.0 Flash, and LLaMA-4-Scout)
+* Human vision begins with severely **immature** inputs, whereas current ANNs mainly train on **instantaneous, high-fidelity** inputs.  
+* We model developmental trajectories of **visual acuity**, **contrast sensitivity**, and **chromatic sensitivity** from birth to 25 years.  
+* A differentiable pipeline dynamically applies these sensory maturation *on-the-fly* during training.  
+* Guiding AI vision through this **Developmental Visual Diet** produces models that better align with hallmark features of human visual robustness:  
+  1) Near-human **shape bias**  
+  2) Enhanced **robustness to corruptions**  
+  3) Improved **resilience to adversarial attacks**  
+  4) **Abstract shape recognition** beyond state-of-the-art vision-language models (e.g., ChatGPT-4o, Gemini 2.0 Flash, LLaMA-4-Scout)
 
 ### 📈 Developmental Visual Trajectories  
 
