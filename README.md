@@ -110,8 +110,8 @@ torchrun --nproc_per_node=1 scripts/main.py \
 | `--development_strategy` | `dvd` (full curriculum) or `adult` (control).       |
 | `--months_per_epoch`     | Virtual ageing per epoch (smaller = finer).         |
 | `--time_order`           | `chronological`, `fully_random`.                    |
-| `--apply_*`              | Toggle acuity / colour / contrast stages.           |
-| `--contrast_amplitude_*` | Fine-tune frequency thresholding.                   |
+| `--apply_*`              | Toggle acuity / colour / contrast sensitivities.    |
+| `--contrast_amplitude_*` | Fine-tune frequency amplitude thresholding.         |
 
 
 ## 5 Core API
@@ -147,10 +147,10 @@ images_aged = dvdt.apply_fft_transformations(
 ## 6 Citation
 
 ```bash
-@article{li2025dvd,
+@article{lu2025dvd,
   title   = {Adopting a human developmental visual diet yields robust, shape-based AI vision models},
   author  = {Zejin Lu, Sushrut Thorat, Radoslaw M Cichy & Tim C Kietzmann},
   journal = {Placeholders – will be filled once DOI is live.)},
   year    = {2025}
-} -->
+} 
 ```
