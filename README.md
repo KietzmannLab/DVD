@@ -49,7 +49,7 @@ AGES = [1, 4, 16, 64, 256]  # in months
 IMG_SIZE = 224              # Resize target size
 
 # Input and output paths
-SOURCE_DIR = Path("./data/example_stimuli/")
+SOURCE_DIR = Path("./assets/example_stimuli/")
 IMAGE_PATHS = [
     SOURCE_DIR / "example_1.jpeg",
     SOURCE_DIR / "example_2.jpeg",
