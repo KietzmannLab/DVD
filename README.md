@@ -113,19 +113,23 @@ torchrun --nproc_per_node=1 scripts/main.py \
 ## 5 Core API
 
 ```python
-from dvd.dvd.development import DVDTransformer
+from dvd.dvd.development import DVDTransformer, generate_age_months_curve
+
+# Initialize transformer and generate age mapping curve
 dvdt = DVDTransformer()
-
-# Generate age months curve to map batches to age months for DVD
-age_months_curve = dvd.dvd.development.generate_age_months_curve(
-    args.epochs,
-    len(train_loader),
-    args.months_per_epoch,
+age_curve = generate_age_months_curve(
+    epochs=args.epochs,
+    steps_per_epoch=len(train_loader),
+    months_per_epoch=args.months_per_epoch,
 )
-age_months = age_months_curve[(epoch -0) * len(train_loader) + i]
 
+# Map current batch index to virtual age in months
+step_idx = (epoch * len(train_loader)) + i
+age_months = age_curve[step_idx]
+
+# Apply age-based visual transformations
 images_aged = dvdt.apply_fft_transformations(
-    images,                 # Tensor [B,3,H,W] ∈ [0,1]
+    images,  # Tensor [B, 3, H, W] in [0, 1]
     age_months=age_months,
     apply_blur=True,
     apply_color=True,
@@ -133,7 +137,6 @@ images_aged = dvdt.apply_fft_transformations(
     contrast_amplitude_beta=0.1,
     contrast_amplitude_lambda=150,
     image_size=224,
-    fully_random=False,
 )
 ```
 
