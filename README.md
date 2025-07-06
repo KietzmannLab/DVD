@@ -17,7 +17,7 @@ A plug-and-play training curriculum that progressively “ages” each image, mi
   3) Improved **resilience to adversarial attacks**  
   4) **Abstract shape recognition** beyond state-of-the-art vision-language models (e.g., ChatGPT-4o, Gemini 2.0 Flash, LLaMA-4-Scout)
 
-### 📈 Developmental Visual Trajectories  
+### 📈 Developmental visual trajectories  
 
 ![Age-dependent visual development curves](./assets/DVD_trajectories.png)
 
