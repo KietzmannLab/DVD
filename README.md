@@ -2,7 +2,7 @@
 
 # Adopting a human developmental visual diet (DVD) diet yields robust, shape-based AI vision
 
-A *plug-and-play training curriculum* that “ages” each image to mimic the developing optics and neural sensitivities of the human visual system from immature newborn vision to mature adulthood.
+A plug-and-play training curriculum that progressively “ages” each image, mimicking the evolving visual sensitivities of the human visual system, from immature newborn vision through to mature adulthood.
 
 ---
 
