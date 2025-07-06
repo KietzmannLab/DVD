@@ -12,7 +12,7 @@ A plug-and-play training curriculum that progressively “ages” each image, mi
 * We model developmental trajectories of **visual acuity**, **contrast sensitivity**, and **chromatic sensitivity** from birth to 25 years.  
 * A differentiable pipeline dynamically applies these sensory maturation *on-the-fly* during training.  
 * Guiding AI vision through this **Developmental Visual Diet** produces models that better align with hallmark features of human visual robustness:  
-  1) Near-human **shape bias**  
+  1) Near-human-level **shape bias**  
   2) Enhanced **robustness to corruptions**  
   3) Improved **resilience to adversarial attacks**  
   4) **Abstract shape recognition** beyond state-of-the-art vision-language models (e.g., ChatGPT-4o, Gemini 2.0 Flash, LLaMA-4-Scout)
