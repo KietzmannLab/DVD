@@ -35,7 +35,7 @@ print("DVD version:", dvd.__version__, "| CUDA =", torch.cuda.is_available())
 PY
 ```
 
-## 3 Quick demo - aging images
+## 3 Quick demo - aging visual experience
 
 ```python
 from pathlib import Path
