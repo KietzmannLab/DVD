@@ -40,14 +40,11 @@ PY
 ```python
 from pathlib import Path
 from typing import List
-
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 import torch
-
-# DVD simulator (main public API)
-from dvd.dvd.development import DVDTransformer, DVDConfig
+from dvd.dvd.development import DVDTransformer, DVDConfig # DVD Data Transformer (main API)
 
 # ------------------------------------------------------------
 # Configuration
@@ -63,7 +60,6 @@ IMAGE_PATHS = [
     ASSETS_DIR / "example_1.jpeg",
     ASSETS_DIR / "example_2.jpeg",
 ]
-
 OUT_DIR = Path("results/dvd_demo_output")
 OUT_PATH = OUT_DIR / "dvd_demo_output_percentile.pdf"
 
