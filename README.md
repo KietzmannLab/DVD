@@ -99,7 +99,7 @@ make_demo(IMAGE_PATHS, OUT_PATH)
 ## 4 Training with DVD
 
 ```bash
-torchrun --nproc_per_node=1 scripts/main.py \
+python scripts/main.py \
   --dataset-name ecoset --data-root /datasets \
   --arch resnet50 --epochs 300 --batch-size 512 --image-size 256 \
   --lr 1e-4 --lr-scheduler fixed \
