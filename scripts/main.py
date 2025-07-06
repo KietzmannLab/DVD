@@ -22,6 +22,7 @@ import dvd.dvd.development
 import dvd.models.loader
 import dvd.models.eval
 from dvd.datasets.dataset_loader import SupervisedLearningDataset
+from dvd.dvd.development import DVDTransformer, DVDConfig, AgeCurve
 
 torchvision_model_names = sorted(
     name
@@ -186,6 +187,9 @@ parser.add_argument('--apply_blur', type=int, default=1, help='Flag to apply blu
 parser.add_argument('--apply_color', type=int, default=1, help='Flag to apply color changes')
 parser.add_argument('--apply_threshold_color', type=int, default=0, help='Flag to apply threshold color changes')
 parser.add_argument('--apply_contrast', type=int, default=1, help='Flag to apply contrast adjustments')
+parser.add_argument('--apply_contrast_by_percentile', type=int, default=0, help='Flag to apply contrast adjustments in percentile')
+
+
 
 # additional configs:
 parser.add_argument('--pretrained', default='', type=str,
@@ -378,7 +382,7 @@ def train(
     iters_per_epoch = len(train_loader)
 
     # Generate age months curve to map batches to age months for DVD
-    age_months_curve = dvd.dvd.development.generate_age_months_curve(
+    age_months_curve = AgeCurve.generate(
         args.epochs,
         len(train_loader),
         args.months_per_epoch,
@@ -418,20 +422,30 @@ def train(
 
         # Experience across visual development
         if args.development_strategy == "dvd":
-            images = dvd.dvd.development.DVDTransformer().apply_fft_transformations(
-                images,
-                age_months,
-                apply_blur=args.apply_blur, 
-                apply_color=args.apply_color, 
-                apply_contrast=args.apply_contrast,
-                contrast_amplitude_beta=args.contrast_amplitude_beta,
-                contrast_amplitude_lambda = args.contrast_amplitude_lambda,
-                apply_threshold_color=args.apply_threshold_color,
-                image_size=args.image_size,
-                fully_random=(args.time_order == "fully_random"), # just for control models
-                age_months_curve= age_months_curve,
-                verbose=False,
-            )
+            # images = dvd.dvd.development.DVDTransformer().apply_fft_transformations(
+            #     images,
+            #     age_months,
+            #     apply_blur=args.apply_blur, 
+            #     apply_color=args.apply_color, 
+            #     apply_contrast=args.apply_contrast,
+            #     contrast_amplitude_beta=args.contrast_amplitude_beta,
+            #     contrast_amplitude_lambda = args.contrast_amplitude_lambda,
+            #     apply_threshold_color=args.apply_threshold_color,
+            #     image_size=args.image_size,
+            #     fully_random=(args.time_order == "fully_random"), # just for control models
+            #     age_months_curve= age_months_curve,
+            #     verbose=False,
+            # )
+            dvdt =  DVDTransformer(DVDConfig(
+                                    blur=args.apply_blur, color=args.apply_color, contrast=args.apply_contrast,
+                                    beta=args.contrast_amplitude_beta, lam=args.contrast_amplitude_lambda, 
+                                    threshold_color=args.apply_threshold_color,
+                                    image_size=args.image_size,
+                                    by_percentile=args.apply_contrast_by_percentile,  
+                                )
+                            )
+            images = dvdt(images, age_months, curriculum=age_months_curve, randomise=(args.time_order == "fully_random"), 
+                           verbose=False,)
         elif args.development_strategy == "adult":
             pass
         else:

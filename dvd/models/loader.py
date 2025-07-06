@@ -166,25 +166,6 @@ def change_vit_num_classes(model: nn.Module, num_classes: int) -> nn.Module:
         f"Expected 'heads' to contain key 'head'. Model structure: {model}"
     )
 
-# def remove_prefix(state_dict):
-#     """Strip the DataParallel prefix from state dict keys if it exists."""
-#     use_multi_gpu = torch.cuda.device_count() > 1
-
-#     new_state_dict = {}
-#     for k, v in state_dict.items():
-#         # import pdb; pdb.set_trace()
-#         if k.startswith("module._orig_mod."):
-#             if use_multi_gpu:
-#                 new_key = k[:len("module.")]+k[len("module._orig_mod."):]
-#             else:
-#                 new_key = k[len("module._orig_mod."):]
-#         elif k.startswith("module."):
-#             new_key = k[len("module."):]
-#         else:
-#             new_key = k
-#         new_state_dict[new_key] = v
-#     return new_state_dict
-
 
 def remove_prefix(state_dict: dict) -> dict:
     """
