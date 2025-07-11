@@ -45,3 +45,5 @@ scripts/*
 !scripts/main.py
 # Ignore the dvd/analysis directory 
 dvd/analysis/
+
+And to better understand whether there is an issue or not, we could plot how the shape bias changes over time. For example, you could plot shape bias every 5 epochs — it might increase a bit at the beginning, but then decrease l

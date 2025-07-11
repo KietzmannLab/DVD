@@ -142,9 +142,11 @@ images_aged = dvdt(img_t.clone(), months=age, curriculum=age_curve)
 
 ```bash
 @article{lu2025dvd,
-  title   = {Adopting a human developmental visual diet yields robust, shape-based AI vision models},
-  author  = {Zejin Lu, Sushrut Thorat, Radoslaw M Cichy & Tim C Kietzmann},
-  journal = {Placeholders – will be filled once DOI is live.)},
-  year    = {2025}
-} 
+  title   = {Adopting a human developmental visual diet yields robust, shape-based AI vision},
+  author  = {Zejin Lu, Sushrut Thorat, Radoslaw M. Cichy, Tim C. Kietzmann},
+  journal = {arXiv preprint arXiv:2507.03168},
+  year    = {2025},
+  doi     = {10.48550/arXiv.2507.03168},
+  url     = {https://arxiv.org/abs/2507.03168}
+}
 ```

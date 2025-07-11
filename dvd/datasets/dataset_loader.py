@@ -10,6 +10,7 @@ import torchvision
 from torchvision.transforms import transforms
 from torchvision import transforms, datasets
 from dvd.datasets.view_generator import ContrastiveLearningViewGenerator
+from torch.utils.data.distributed import DistributedSampler
 
 from typing import Optional, Dict
 
@@ -550,6 +551,7 @@ class ContrastiveLearningDataset:
         self.root_folder = root_folder
         self.args = args if args is not None else {}
         self.n_views = n_views
+        self.image_size = getattr(self.args, 'image_size', 256)
     
     def get_simclr_pipeline_transform(self, train=True, args=None, normalize_type='0-1'):
         """
@@ -560,7 +562,7 @@ class ContrastiveLearningDataset:
 
         # ADD to float, need to be done before Kornia transforms
         aug_list.append(torchvision.transforms.ConvertImageDtype(torch.float))
-        aug_list.append(K.Resize((self.args.image_size, self.args.image_size)))
+        aug_list.append(K.Resize((self.image_size , self.image_size)))
 
         if train:
             #* Now set the same as supervised learning
@@ -667,27 +669,65 @@ class ContrastiveLearningDataset:
 
     def _get_imagenet(self):
         """
-        Example: ImageNet. 
-        Here, we demonstrate a simple approach: rely on torchvision's ImageNet if available,
-        or a custom approach. For demonstration, we use a placeholder.
+        Load ImageNet-1k for self-supervised contrastive learning.
+
+        It expects the canonical folder layout::
+            <imagenet_root>/
+                train/
+                    n01440764/xxx.JPEG
+                    ...
+                val/
+                    n01440764/xxx.JPEG
+                    ...
+
+        Returns
+        -------
+        dict
+            {
+            'train'        : torchvision.datasets.ImageFolder,
+            'val'          : torchvision.datasets.ImageFolder,
+            'test'         : torchvision.datasets.ImageFolder,   # alias to val
+            'train_sampler': torch.utils.data.DistributedSampler | None,
+            'val_sampler'  : torch.utils.data.DistributedSampler | None
+            }
         """
-        image_size = 256 #self.args.get('dataset', {}).get('image_size', 224)
-        print("[INFO] Loading ImageNet dataset (placeholder).")
 
-        simclr_transform = self.get_simclr_pipeline_transform()
-        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
+        # ---------- paths ----------
+        imagenet_root = getattr(self.args, "imagenet_path",
+                                "/share/klab/datasets/imagenet")
+        train_dir = os.path.join(imagenet_root, "train")
+        val_dir   = os.path.join(imagenet_root, "val")
+        if not (os.path.isdir(train_dir) and os.path.isdir(val_dir)):
+            raise FileNotFoundError(
+                f"Expected ImageNet folders at {train_dir} and {val_dir}"
+            )
 
-        # For real usage with ImageNet, you might do:
-        # return datasets.ImageNet(self.root_folder, split='train', transform=contrastive_transform)
-        # or use a custom data loader.
+        # ---------- transforms ----------
+        simclr_train = self.get_simclr_pipeline_transform(train=True)
+        train_transform = ContrastiveLearningViewGenerator(simclr_train,
+                                                        self.n_views)
 
-        return datasets.FakeData(
-            size=1000,  # Example
-            image_size=(3, image_size, image_size),
-            num_classes=1000,
-            transform=contrastive_transform
-        )
+        simclr_eval = self.get_simclr_pipeline_transform(train=False)
+        eval_transform = ContrastiveLearningViewGenerator(simclr_eval,
+                                                        self.n_views)
 
+        # ---------- datasets ----------
+        train_dataset = datasets.ImageFolder(train_dir, transform=train_transform)
+        val_dataset   = datasets.ImageFolder(val_dir,   transform=eval_transform)
+
+        # ---------- distributed samplers (optional) ----------
+        train_sampler = val_sampler = None
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            train_sampler = DistributedSampler(train_dataset, shuffle=True)
+            val_sampler   = DistributedSampler(val_dataset,   shuffle=False)
+
+        return {
+            'train'        : train_dataset,
+            'val'          : val_dataset,
+            'test'         : val_dataset,   # reuse val split
+            'train_sampler': train_sampler,
+            'val_sampler'  : val_sampler,
+        }
     def _get_facescrub(self):
         """
         Example: FaceScrub dataset usage.

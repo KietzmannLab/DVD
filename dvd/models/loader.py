@@ -80,16 +80,7 @@ def create_model(args, logger=None):
                 raise ValueError(f"Unable to determine final layer for {args.arch}.")
 
     # Select how many classes we want based on dataset_name
-    if args.dataset_name == "texture2shape_miniecoset":
-        out_dim = 112
-    elif args.dataset_name in ["ecoset_square256", "ecoset_square256_patches"]:
-        out_dim = 565
-    elif args.dataset_name == "imagenet":
-        out_dim = 1000
-    elif  args.dataset_name == 'facescrub':
-        out_dim = 118
-    else:
-        raise ValueError(f"dataset_name: {args.dataset_name} not supported")
+    out_dim = get_output_dim(args.dataset_name)
 
     # Update the final layer to match our number of classes
     try:
@@ -420,4 +411,29 @@ def resume_latest_checkpoint(args, model, optimizer, scaler, logger, log_dir):
         model.load_state_dict(checkpoint["state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer"])
     scaler.load_state_dict(checkpoint["scaler"])
-    logger.info(f"Successfully loaded checkpoint '{checkpoint_path}' (epoch {checkpoint[
+    logger.info(f"Successfully loaded checkpoint '{checkpoint_path}' (epoch {checkpoint['epoch']})")
+
+
+def get_output_dim(dataset_name):
+    """
+    Return the number of output classes based on the dataset name.
+
+    Parameters:
+    - dataset_name (str): Name of the dataset.
+
+    Returns:
+    - out_dim (int): Number of output classes.
+
+    Raises:
+    - ValueError: If the dataset_name is not recognized.
+    """
+    if dataset_name == "texture2shape_miniecoset":
+        return 112
+    elif dataset_name in ["ecoset_square256", "ecoset_square256_patches"]:
+        return 565
+    elif dataset_name == "imagenet":
+        return 1000
+    elif dataset_name == "facescrub":
+        return 118
+    else:
+        raise ValueError(f"dataset_name: {dataset_name} not supported")

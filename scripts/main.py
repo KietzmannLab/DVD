@@ -165,7 +165,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--months-per-epoch",
-    default=1,
+    default=2,
     type=float,
     help="number of months per epoch",
 )
@@ -177,7 +177,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--contrast_amplitude_lambda",
-    default=100,
+    default=150,
     type=float,
     help="decrease contrast drop speed (default: 100)",
 )
