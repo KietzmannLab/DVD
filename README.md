@@ -24,6 +24,7 @@ A plug-and-play training curriculum that progressively “ages” each image, mi
 ---
 
 ## 2 Installation
+Typical install time on a standard desktop computer: ~1–3 minutes.
 
 ```bash
 git clone https://github.com/KietzmannLab/DVD.git
@@ -36,6 +37,8 @@ PY
 ```
 
 ## 3 Quick demo - aging visual experience
+
+Typical running time: ~1 minute on a single H100 GPU.
 
 ```python
 from pathlib import Path
@@ -95,8 +98,16 @@ def make_demo(paths: List[Path], outfile: Path) -> None:
 
 make_demo(IMAGE_PATHS, OUT_PATH)
 ```
+## 4 Datasets
 
-## 4 Training with DVD
+This project makes use of several datasets:
+
+| Dataset   | Description                                                               | Link |
+|-----------|---------------------------------------------------------------------------|------|
+| **Ecoset** | A natural image dataset introduced in Mehrer et al., 2021                 | [Ecoset Website](https://www.kietzmannlab.org/ecoset/) |
+| **ImageNet** | Our models were also trained on the initial release of ImageNet         | [ImageNet Website](https://www.image-net.org/) |
+
+## 5 Training with DVD
 
 ```bash
 python scripts/main.py \
@@ -117,7 +128,7 @@ python scripts/main.py \
 | `--contrast_amplitude_*` | Fine-tune frequency amplitude thresholding.         |
 
 
-## 5 Core API
+## 6 Core API
 
 ```python
 from dvd.dvd.development import DVDTransformer, DVDConfig, AgeCurve
@@ -138,7 +149,7 @@ age_months = age_curve[step_idx]
 images_aged = dvdt(img_t.clone(), months=age, curriculum=age_curve)      
 ```
 
-## 6 Citation
+## 7 Citation
 
 ```bash
 @article{lu2025dvd,
