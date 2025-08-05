@@ -22,6 +22,11 @@ import torchvision.transforms.functional as F
 import kornia.color as kc
 import kornia.filters as kf
 
+try:
+    import pytorch_lightning as pl
+except ModuleNotFoundError:  # keep import‑side optional for non‑Lightning users
+    pl = None  # type: ignore
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -265,10 +270,15 @@ def _contrast_fft(
     power = torch.abs(fft) ** 2
 
     if by_percentile:
-        q = 1.0 - 1.0 / (1.0 + math.exp(-gamma * (sens - mid_q)))
-        q = max(0.01, min(q, 0.99))
-        thr = torch.quantile(power.flatten(), q)
-        mask = power >= thr
+        q = 1 - 1 / (1 + math.exp(-gamma * (sens - mid_q)))
+        q = float(max(0.01, min(q, 0.99)))
+
+        # --- new: quantile per sample, avoids >16 M limit ---
+        B = power.size(0)
+        flat = power.reshape(B, -1)         # [B, N]
+        thr = torch.quantile(flat, q, dim=1, keepdim=True)  # [B,1] # dim=1 keeps each sample “independent”
+        mask = flat >= thr                  # [B,N]
+        mask = mask.view_as(power)          # reshape back
     else:
         max_p = power.max()
         thr = (
@@ -283,6 +293,95 @@ def _contrast_fft(
     fft_filtered = fft * mask
     return torch.fft.ifft2(fft_filtered).real
 
+# ---------------------------------------------------------------------------
+# Lightning integration — PyTorch‑Lightning Callback
+# ---------------------------------------------------------------------------
+
+class DVDCallback(pl.Callback if pl else object):
+    """Inject age‑dependent degradations **before** the forward pass.
+
+    The callback is completely stateless w.r.t. Lightning – every process holds
+    its *own* `AgeCurve`, so DDP training is deterministic.  The curriculum is
+    based on **global optimiser steps** (`trainer.global_step`) which makes
+    resuming from checkpoints seamless.
+
+    Parameters
+    ----------
+    cfg
+        :class:`DVDConfig` instance that selects which degradations are active
+        and their hyper‑parameters.
+    total_epochs
+        Total number of *training* epochs Lightning will run.
+    iters_per_epoch
+        Number of optimisation steps (batches) per epoch.  If you use dynamic
+        re‑sizing (e.g. distributed `BatchSampler`) compute this **after** the
+        dataloader is built: ``iters = len(train_loader)``.
+    months_per_epoch
+        Either a *float* (uniform growth) **or** a list/tuple with one entry per
+        epoch to allow custom pacing.
+    seed
+        RNG seed for shuffled curricula.
+    time_order
+        Behaviour of the curriculum: ``"linear"`` (monotone), ``"mid_phase"``
+        (shuffle 2nd half), ``"random"`` (shuffle whole curve) or
+        ``"fully_random"`` (sample ≤ current age every call).
+    """
+
+    def __init__(
+        self,
+        *,
+        cfg: DVDConfig,
+        total_epochs: int,
+        iters_per_epoch: int,
+        months_per_epoch: float | Sequence[float] = 0.25,
+        seed: int | None = 0,
+        time_order: str = "normal",
+    ) -> None:
+        if pl is None:
+            raise RuntimeError("pytorch_lightning not installed – callback unusable")
+
+        self.transformer = DVDTransformer(cfg)
+        self.curve = AgeCurve.generate(
+            epochs=total_epochs,
+            batches_per_epoch=iters_per_epoch,
+            months_per_epoch=months_per_epoch if isinstance(months_per_epoch, float) else months_per_epoch[0] if months_per_epoch else 0.25,
+            shuffle=(time_order == "random"),
+            mid_phase=(time_order == "mid_phase"),
+            seed=seed,
+        )
+        self.fully_random = time_order == "fully_random"
+
+    # ------------------------------------------------------------------
+    def on_train_batch_start(
+        self,
+        trainer: "pl.Trainer",
+        pl_module: "pl.LightningModule",
+        batch: Tuple[Any, ...] | List[Any],
+        batch_idx: int,
+    ) -> Tuple[Any, ...] | List[Any] | None:  # noqa: D401
+        """Apply DVD before the model sees the image batch."""
+        global_step = trainer.global_step  # counts optimiser steps *across* epochs
+
+        # Guard against over‑stepping (can happen with grad‑accum)
+        if global_step >= len(self.curve):
+            return batch
+
+        age_mo = self.curve[global_step]
+
+        # We expect batch → (images, *rest)
+        imgs, *rest = batch
+        if not isinstance(imgs, torch.Tensor):
+            raise TypeError(
+                "DVDVisionCallback expects first element of batch to be a Tensor, "
+                f"got {type(imgs).__name__} instead."
+            )
+
+        imgs = self.transformer(
+            imgs,
+            age_mo,
+            randomise=self.fully_random,
+        )
+        return (imgs, *rest)  # Lightning will forward the modified batch
 
 # ---------------------------------------------------------------------------
 # ---------------------------- Usage Example ------------------------------- #
@@ -349,3 +448,5 @@ if __name__ == "__main__":
 
     # --------------------------- Run it -------------------------------------
     grid_demo(IMAGE_PATHS, OUTPUT_PATH, apply_contrast_by_percentile=True)
+
+

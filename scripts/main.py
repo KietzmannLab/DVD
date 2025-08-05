@@ -125,13 +125,13 @@ parser.add_argument(
 
 parser.add_argument(
     "--optimizer",
-    default="adam",
+    default="lars",
     type=str,
     choices=["lars", "adamw", "adam"],
     help="optimizer used (default: lars)",
 )
 parser.add_argument(
-    "--warmup-epochs", default=0, type=int, metavar="N", help="number of warmup epochs (default None)"
+    "--warmup-epochs", default=10, type=int, metavar="N", help="number of warmup epochs (default None)"
 )
 parser.add_argument(
     "--save-checkpoint-every-epochs",
@@ -237,6 +237,12 @@ parser.add_argument(
     type=int,
     help="apply blur transformation",
 ) # args.blur_aug
+parser.add_argument(
+    "--crop-min",
+    default=1.0,
+    type=float,
+    help="minimum scale for random cropping (default: 1.0 or 0.08)",
+)
 
 # best_acc1
 parser.add_argument("--best-acc1", default=0.0, type=float,
@@ -265,7 +271,7 @@ def setup_logging_and_wandb(args):
             f'_dn{args.contrast_amplitude_lambda}_{args.dataset_name}'
             f'{args.image_size}_{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}'
             f'_b{args.apply_blur}c{args.apply_color}cs{args.apply_contrast}'
-            f'_T_{args.time_order}_seed_{args.seed}'
+            f'_T_{args.time_order}_percentile{args.apply_contrast_by_percentile}_seed_{args.seed}'
         ) 
     else:
         net_name = f'{args.arch}_{args.dataset_name}_{args.image_size}_{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}_seed_{args.seed}'
@@ -422,20 +428,6 @@ def train(
 
         # Experience across visual development
         if args.development_strategy == "dvd":
-            # images = dvd.dvd.development.DVDTransformer().apply_fft_transformations(
-            #     images,
-            #     age_months,
-            #     apply_blur=args.apply_blur, 
-            #     apply_color=args.apply_color, 
-            #     apply_contrast=args.apply_contrast,
-            #     contrast_amplitude_beta=args.contrast_amplitude_beta,
-            #     contrast_amplitude_lambda = args.contrast_amplitude_lambda,
-            #     apply_threshold_color=args.apply_threshold_color,
-            #     image_size=args.image_size,
-            #     fully_random=(args.time_order == "fully_random"), # just for control models
-            #     age_months_curve= age_months_curve,
-            #     verbose=False,
-            # )
             dvdt =  DVDTransformer(DVDConfig(
                                     blur=args.apply_blur, color=args.apply_color, contrast=args.apply_contrast,
                                     beta=args.contrast_amplitude_beta, lam=args.contrast_amplitude_lambda, 

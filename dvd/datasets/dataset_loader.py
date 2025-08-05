@@ -205,15 +205,18 @@ class SupervisedLearningDataset:
         aug_list.append(K.Resize((self.args.image_size, self.args.image_size)))
     
         if train:
+            if getattr(self.args, "crop_min", 1.0)<1:
+                transforms.RandomResizedCrop(self.image_size, scale=(self.args.crop_min, 1.0)),
             # Typical augmentations for training
             aug_list.append(K.RandomHorizontalFlip(p=0.25))
             aug_list.append(K.RandomRotation(degrees=15.0, p=0.25))
-            aug_list.append(K.RandomGrayscale(p=0.5))
+            if getattr(self.args, "grayscale_aug", True):
+                aug_list.append(K.RandomGrayscale(p=0.5))
             aug_list.append(K.RandomBrightness(brightness=(0.8, 1.2), p=0.5))
             aug_list.append(K.RandomEqualize(p=0.5))
             aug_list.append(K.RandomPerspective(distortion_scale=0.5, p=0.5))
             aug_list.append(K.RandomSharpness(p=0.5))
-            if getattr(self.args, "blur_aug", False):
+            if getattr(self.args, "blur_aug", True):
                 aug_list.append(K.RandomGaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0), p=0.5))
         else:
             # Typical "inference" transforms (e.g. CenterCrop, Resize)
@@ -565,16 +568,18 @@ class ContrastiveLearningDataset:
         aug_list.append(K.Resize((self.image_size , self.image_size)))
 
         if train:
+            if getattr(self.args, "crop_min", 1.0)<1:
+                transforms.RandomResizedCrop(self.image_size, scale=(self.args.crop_min, 1.0)),
             #* Now set the same as supervised learning
             aug_list.append(K.RandomHorizontalFlip(p=0.25))
             aug_list.append(K.RandomRotation(degrees=15.0, p=0.25))
-            # if self.args.grayscale_aug:
-            aug_list.append(K.RandomGrayscale(p=0.5))
+            if getattr(self.args, "grayscale_aug", True):
+                aug_list.append(K.RandomGrayscale(p=0.5))
             aug_list.append(K.RandomBrightness(brightness=(0.8, 1.2), p=0.5))
             aug_list.append(K.RandomEqualize(p=0.5))
             aug_list.append(K.RandomPerspective(distortion_scale=0.5, p=0.5))
             aug_list.append(K.RandomSharpness(p=0.5))
-            if getattr(self.args, "blur_aug", False):
+            if getattr(self.args, "blur_aug", True):
                 aug_list.append(K.RandomGaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0), p=0.5))
 
         # Build the final pipeline
@@ -667,67 +672,39 @@ class ContrastiveLearningDataset:
         )
         return dataset
 
-    def _get_imagenet(self):
+    
+    def _get_imagenet(self) -> Dict[str, torch.utils.data.Dataset]:
         """
-        Load ImageNet-1k for self-supervised contrastive learning.
-
-        It expects the canonical folder layout::
-            <imagenet_root>/
-                train/
-                    n01440764/xxx.JPEG
-                    ...
-                val/
-                    n01440764/xxx.JPEG
-                    ...
-
-        Returns
-        -------
-        dict
-            {
-            'train'        : torchvision.datasets.ImageFolder,
-            'val'          : torchvision.datasets.ImageFolder,
-            'test'         : torchvision.datasets.ImageFolder,   # alias to val
-            'train_sampler': torch.utils.data.DistributedSampler | None,
-            'val_sampler'  : torch.utils.data.DistributedSampler | None
-            }
+        Example: ImageNet. For demonstration, we use torchvision's
+        datasets.FakeData as a placeholder.
         """
+        image_size = 256 #self.args.get('dataset', {}).get('image_size', 224)
+        imagenet_path= "/share/klab/datasets/imagenet/"
+        print(f"[INFO] Loading ImageNet dataset ({imagenet_path}).")
 
-        # ---------- paths ----------
-        imagenet_root = getattr(self.args, "imagenet_path",
-                                "/share/klab/datasets/imagenet")
-        train_dir = os.path.join(imagenet_root, "train")
-        val_dir   = os.path.join(imagenet_root, "val")
-        if not (os.path.isdir(train_dir) and os.path.isdir(val_dir)):
-            raise FileNotFoundError(
-                f"Expected ImageNet folders at {train_dir} and {val_dir}"
-            )
 
-        # ---------- transforms ----------
-        simclr_train = self.get_simclr_pipeline_transform(train=True)
-        train_transform = ContrastiveLearningViewGenerator(simclr_train,
-                                                        self.n_views)
+        simclr_transform = self.get_simclr_pipeline_transform()
+        contrastive_transform = ContrastiveLearningViewGenerator(simclr_transform, self.n_views)
+        val_test_transform   =  None # SupervisedLearningDataset().get_supervised_pipeline_transform(train=False)
 
-        simclr_eval = self.get_simclr_pipeline_transform(train=False)
-        eval_transform = ContrastiveLearningViewGenerator(simclr_eval,
-                                                        self.n_views)
 
-        # ---------- datasets ----------
-        train_dataset = datasets.ImageFolder(train_dir, transform=train_transform)
-        val_dataset   = datasets.ImageFolder(val_dir,   transform=eval_transform)
+        from dvd.datasets.imagenet.imagenet import load_imagenet
 
-        # ---------- distributed samplers (optional) ----------
-        train_sampler = val_sampler = None
-        if torch.distributed.is_available() and torch.distributed.is_initialized():
-            train_sampler = DistributedSampler(train_dataset, shuffle=True)
-            val_sampler   = DistributedSampler(val_dataset,   shuffle=False)
+        train_dataset, train_sampler, val_dataset = load_imagenet(imagenet_path=imagenet_path,
+                                                    batch_size= self.args.batch_size_per_gpu,
+                                                    distributed = True,
+                                                    workers = self.args.workers,
+                                                    train_transforms = contrastive_transform,
+                                                    test_transforms= val_test_transform,
+                                                    # normalization = False, # Not setting norm here
+        )
 
         return {
-            'train'        : train_dataset,
-            'val'          : val_dataset,
-            'test'         : val_dataset,   # reuse val split
-            'train_sampler': train_sampler,
-            'val_sampler'  : val_sampler,
+            'train': train_dataset,
+            'val': val_dataset,
+            'test': val_dataset,
         }
+    
     def _get_facescrub(self):
         """
         Example: FaceScrub dataset usage.
