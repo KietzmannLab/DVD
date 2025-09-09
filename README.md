@@ -64,7 +64,7 @@ IMAGE_PATHS = [
     ASSETS_DIR / "example_2.jpeg",
 ]
 OUT_DIR = Path("results/dvd_demo_output")
-OUT_PATH = OUT_DIR / "dvd_demo_output_percentile.pdf"
+OUT_PATH = OUT_DIR / "dvd_demo_output.pdf"
 
 # Helper: load an image as [1, 3, H, W] float tensor in [0, 1]
 def load_tensor(fp: Path) -> torch.Tensor:
