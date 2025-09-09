@@ -139,8 +139,12 @@ class KorniaTransform(nn.Module):
             self.std = torch.tensor([0.229, 0.224, 0.225])
 
     def forward(self, x):
-        # if not a tensor, convert it to tensor
-        if not torch.is_tensor(x):
+        # ensure float in [0,1]
+        if isinstance(x, torch.Tensor):
+            if x.dtype == torch.uint8:
+                x = x.float() / 255.0
+        else:
+            # PIL → tensor in [0,1]
             x = torchvision.transforms.functional.to_tensor(x)
         # x should be a Tensor (C,H,W) or (B,C,H,W) on GPU/CPU
         x = self.aug_pipe(x)
@@ -210,12 +214,13 @@ class SupervisedLearningDataset:
             # Typical augmentations for training
             aug_list.append(K.RandomHorizontalFlip(p=0.25))
             aug_list.append(K.RandomRotation(degrees=15.0, p=0.25))
+            aug_list.append(K.RandomBrightness(brightness=(0.8, 1.2), p=0.5))
             if getattr(self.args, "grayscale_aug", True):
                 aug_list.append(K.RandomGrayscale(p=0.5))
-            aug_list.append(K.RandomBrightness(brightness=(0.8, 1.2), p=0.5))
-            aug_list.append(K.RandomEqualize(p=0.5))
-            aug_list.append(K.RandomPerspective(distortion_scale=0.5, p=0.5))
-            aug_list.append(K.RandomSharpness(p=0.5))
+            if getattr(self.args, "additional_aug", True):
+                aug_list.append(K.RandomEqualize(p=0.5))
+                aug_list.append(K.RandomPerspective(distortion_scale=0.5, p=0.5))
+                aug_list.append(K.RandomSharpness(p=0.5))
             if getattr(self.args, "blur_aug", True):
                 aug_list.append(K.RandomGaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0), p=0.5))
         else:
@@ -229,6 +234,46 @@ class SupervisedLearningDataset:
         augmentations = nn.Sequential(*aug_list)
         return KorniaTransform(augmentations, normalize_type, self.args)
 
+    def get_rgbd_supervised_pipeline_transform(self,
+                                          train: bool = True,
+                                          normalize_type: str = '0-1') -> KorniaTransform:
+        """
+        Build a Kornia (or torchvision) augmentation pipeline as an nn.Module
+        suitable for supervised training. The pipeline differs for
+        train vs. val/test.
+        """
+        aug_list = []
+
+        # 1) Convert images to float [0,1]
+        aug_list.append(torchvision.transforms.ConvertImageDtype(torch.float))
+        # 2) Resize to 224x224 or 256x256 if specified in args
+        aug_list.append(FourChannelTransform(K.Resize((self.args.image_size, self.args.image_size))))
+
+        if train:
+            # Typical augmentations for training
+            aug_list.extend([
+                FourChannelTransform(K.RandomHorizontalFlip(p=0.25)),
+                FourChannelTransform(K.RandomRotation(degrees=15.0, p=0.25)),
+                FourChannelTransform(K.RandomGrayscale(p=0.5)),
+                FourChannelTransform(K.RandomBrightness(brightness=(0.8, 1.2), p=0.5)),
+                FourChannelTransform(K.RandomEqualize(p=0.5)),
+                FourChannelTransform(K.RandomPerspective(distortion_scale=0.5, p=0.5)),
+                FourChannelTransform(K.RandomSharpness(p=0.5)),
+                FourChannelTransform(K.RandomGaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0), p=0.5))
+            ])
+            if getattr(self.args, "blur_aug", False):
+                            aug_list.extend([FourChannelTransform(K.RandomGaussianBlur(kernel_size=(5, 5), sigma=(0.1, 2.0), p=0.5))])
+        else:
+            # Typical "inference" transforms (e.g. CenterCrop, Resize)
+            # Adjust as per your dataset dimension preferences:
+            # For example:
+            # aug_list.append(K.CenterCrop((224, 224)))
+            pass
+
+        # Build the final pipeline
+        augmentations = nn.Sequential(*aug_list)
+        return KorniaTransform(augmentations, normalize_type, self.args)
+        
     def get_dataset(self, dataset_name: str) -> Dict[str, torch.utils.data.Dataset]:
         """
         Creates and returns a dict of { 'train': ..., 'val': ..., 'test': ... }
@@ -236,6 +281,7 @@ class SupervisedLearningDataset:
         """
         valid_datasets = {
             'texture2shape_miniecoset': self._get_texture2shape_miniecoset,
+            'rgbd_texture2shape_miniecoset': self._get_rgbd_texture2shape_miniecoset,
             'ecoset_square256': self._get_ecoset_square256,
             'ecoset_square256_patches': self._get_ecoset_square256_patches,
             'imagenet': self._get_imagenet,
@@ -270,6 +316,45 @@ class SupervisedLearningDataset:
         train_transform = self.get_supervised_pipeline_transform(train=True)
         val_transform   = self.get_supervised_pipeline_transform(train=False)
         test_transform  = self.get_supervised_pipeline_transform(train=False)
+
+        # Example: Ecoset-like usage with splits 'train', 'val', 'test'
+        train_dataset = Ecoset(
+            split='train',
+            dataset_path=dataset_path,
+            transform=train_transform,
+            in_memory=True
+        )
+        val_dataset = Ecoset(
+            split='val',
+            dataset_path=dataset_path,
+            transform=val_transform,
+            in_memory=True
+        )
+        test_dataset = Ecoset(
+            split='test',
+            dataset_path=dataset_path,
+            transform=test_transform,
+            in_memory=True
+        )
+
+        return {
+            'train': train_dataset,
+            'val': val_dataset,
+            'test': test_dataset
+        }
+
+    def _get_rgbd_texture2shape_miniecoset(self) -> Dict[str, torch.utils.data.Dataset]:
+        """
+        Example: texture2shape_miniecoset dataset using an .h5 file
+        with train/val/test splits.
+        """
+        dataset_path = "/share/klab/lzejin/rdaria/~miniecoset/absolute/rgbd_texture2shape_miniecoset.h5"
+        print(f"[INFO] Loading texture2shape_miniecoset dataset from {dataset_path}")
+
+        # Get transforms
+        train_transform = self.get_rgbd_supervised_pipeline_transform(train=True)
+        val_transform   = self.get_rgbd_supervised_pipeline_transform(train=False)
+        test_transform  = self.get_rgbd_supervised_pipeline_transform(train=False)
 
         # Example: Ecoset-like usage with splits 'train', 'val', 'test'
         train_dataset = Ecoset(
@@ -888,6 +973,27 @@ class Dataset_from_Dir(Dataset):
         if self.transform:
             image = self.transform(image)
         return image, label
+
+### helper class ###
+class FourChannelTransform(nn.Module):
+    def __init__(self, transform_module):
+        super().__init__()
+        self.transform = transform_module
+
+    def forward(self, x):
+        x = x.unsqueeze(0)
+
+        # Split into RGB channels and depth channel
+        rgb_channels = x[:, :3, ...]
+        depth_channel = x[:, 3:4, ...]
+
+        # Apply transforms to RGB channels
+        transformed_rgb = self.transform(rgb_channels)
+
+        # Combine channels
+        output = torch.cat([transformed_rgb, depth_channel], dim=1)
+
+        return output
 
 # ----------------------------------------------------------------
 # Example usage:

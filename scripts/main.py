@@ -188,6 +188,8 @@ parser.add_argument('--apply_color', type=int, default=1, help='Flag to apply co
 parser.add_argument('--apply_threshold_color', type=int, default=0, help='Flag to apply threshold color changes')
 parser.add_argument('--apply_contrast', type=int, default=1, help='Flag to apply contrast adjustments')
 parser.add_argument('--apply_contrast_by_percentile', type=int, default=0, help='Flag to apply contrast adjustments in percentile')
+# soft_threshold
+parser.add_argument('--soft_threshold', type=int, default=0, help='Flag to apply soft_threshold in fft contrast ')
 
 
 
@@ -236,6 +238,12 @@ parser.add_argument(
     default=1,
     type=int,
     help="apply blur transformation",
+) # args.blur_aug # 
+parser.add_argument(
+    "--additional-aug",
+    default=1,
+    type=int,
+    help="apply blur transformation",
 ) # args.blur_aug
 parser.add_argument(
     "--crop-min",
@@ -278,8 +286,12 @@ def setup_logging_and_wandb(args):
     
     if not args.blur_aug:
         net_name += f'_no_blur_aug' #* just debug
+    if not args.additional_aug:
+        net_name += f'_no_adi_aug' #* just for contol
     if args.apply_threshold_color:
         net_name += f'_threshold_color'
+    if args.soft_threshold:
+        net_name += '_soft'
 
     wandb_run = None
 
@@ -365,7 +377,9 @@ def train(
     wandb_run,
     logger,
     epoch,
+    age_months_curve,
     args,
+    
 ):
     batch_time = dvd.utils.AverageMeter("Time", ":6.3f")
     data_time = dvd.utils.AverageMeter("Data", ":6.3f")
@@ -387,16 +401,6 @@ def train(
     end = time.time()
     iters_per_epoch = len(train_loader)
 
-    # Generate age months curve to map batches to age months for DVD
-    age_months_curve = AgeCurve.generate(
-        args.epochs,
-        len(train_loader),
-        args.months_per_epoch,
-        mid_phase=(args.time_order == "mid_phase"),
-        shuffle=(args.time_order == "random"),
-        seed=args.seed,
-    )
-
     for i, (images, target) in enumerate(train_loader):
         # global step
         it = len(train_loader) * epoch + i
@@ -417,10 +421,6 @@ def train(
                 f"Development strategy {args.lr_scheduler} not implemented"
             )
 
-        # Get age in months (for DVD transformations) | epoch start from 1 so -1
-        age_months = age_months_curve[(epoch -0) * len(train_loader) + i]
-        
-
         if args.gpu is not None:
             images = images.cuda(args.gpu, non_blocking=True)
         if torch.cuda.is_available():
@@ -428,16 +428,18 @@ def train(
 
         # Experience across visual development
         if args.development_strategy == "dvd":
+            # Get age in months (for DVD transformations) | epoch start from 1 so -1
+            age_months = age_months_curve[ epoch* len(train_loader) + i]
             dvdt =  DVDTransformer(DVDConfig(
                                     blur=args.apply_blur, color=args.apply_color, contrast=args.apply_contrast,
                                     beta=args.contrast_amplitude_beta, lam=args.contrast_amplitude_lambda, 
                                     threshold_color=args.apply_threshold_color,
                                     image_size=args.image_size,
-                                    by_percentile=args.apply_contrast_by_percentile,  
+                                    fully_random = args.time_order == "fully_random",
+                                    age_months_curve = age_months_curve,
                                 )
                             )
-            images = dvdt(images, age_months, curriculum=age_months_curve, randomise=(args.time_order == "fully_random"), 
-                           verbose=False,)
+            images = dvdt(images, age_months)
         elif args.development_strategy == "adult":
             pass
         else:
@@ -542,9 +544,21 @@ def main():
     except:
         criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing).cuda(args.gpu)
 
+
+    # Generate age months curve to map batches to age months for DVD
+    age_months_curve = dvd.dvd.development.generate_age_months_curve(
+        args.epochs,
+        len(train_loader),
+        args.months_per_epoch,
+        mid_phase=(args.time_order == "mid_phase"),
+        shuffle=(args.time_order == "random"),
+        seed=args.seed,
+    )
+
     for epoch in range(args.start_epoch, args.epochs):
         train_sampler.set_epoch(epoch)
 
+        
         # train for one epoch
         train(
             train_loader,
@@ -555,6 +569,7 @@ def main():
             wandb_run,
             logger,
             epoch,
+            age_months_curve,
             args,
         )
 

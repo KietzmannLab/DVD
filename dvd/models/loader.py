@@ -79,6 +79,10 @@ def create_model(args, logger=None):
             else:
                 raise ValueError(f"Unable to determine final layer for {args.arch}.")
 
+    # if input is RGB-D not RGB
+    if args.dataset_name in ['rgbd_texture2shape_miniecoset']: 
+        model = change_first_layer_channels(args, model, channels=4)
+
     # Select how many classes we want based on dataset_name
     out_dim = get_output_dim(args.dataset_name)
 
@@ -297,7 +301,7 @@ def load_checkpoint(model, model_path=None, optimizer=None, log_dir=None, args=N
     # Choose the checkpoint source: model_path takes precedence.
     if model_path and os.path.isfile(model_path):
         print("Loading checkpoint '{}'".format(model_path))
-        loc = "cuda:{}".format(args.gpu) if args else ('cuda' if torch.cuda.is_available() else 'cpu')
+        loc = f"cuda:{args.gpu}" if hasattr(args, 'gpu') else ('cuda' if torch.cuda.is_available() else 'cpu')
 
         checkpoint = torch.load(model_path, map_location=loc)
         # import pdb;pdb.set_trace()
@@ -427,7 +431,7 @@ def get_output_dim(dataset_name):
     Raises:
     - ValueError: If the dataset_name is not recognized.
     """
-    if dataset_name == "texture2shape_miniecoset":
+    if dataset_name in ["texture2shape_miniecoset","rgbd_texture2shape_miniecoset"]:
         return 112
     elif dataset_name in ["ecoset_square256", "ecoset_square256_patches"]:
         return 565
@@ -437,3 +441,20 @@ def get_output_dim(dataset_name):
         return 118
     else:
         raise ValueError(f"dataset_name: {dataset_name} not supported")
+
+
+def change_first_layer_channels(args, model, channels=4): ## mine
+    # Store the original pretrained weights for RGB channels
+    original_conv = model.conv1
+    original_weights = original_conv.weight.data  # [64, 3, 7, 7]
+
+    # Create new 4-channel conv layer
+    model.conv1 = torch.nn.Conv2d(channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
+
+    # Transfer pretrained RGB weights to first 3 channels
+    model.conv1.weight.data[:, :3, :, :] = original_weights
+
+    # Initialize 4th channel (depth) with small random values
+    torch.nn.init.normal_(model.conv1.weight.data[:, 3:, :, :], mean=0.0, std=0.01)
+
+    return model
