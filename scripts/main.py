@@ -187,11 +187,6 @@ parser.add_argument('--apply_blur', type=int, default=1, help='Flag to apply blu
 parser.add_argument('--apply_color', type=int, default=1, help='Flag to apply color changes')
 parser.add_argument('--apply_threshold_color', type=int, default=0, help='Flag to apply threshold color changes')
 parser.add_argument('--apply_contrast', type=int, default=1, help='Flag to apply contrast adjustments')
-parser.add_argument('--apply_contrast_by_percentile', type=int, default=0, help='Flag to apply contrast adjustments in percentile')
-# soft_threshold
-parser.add_argument('--soft_threshold', type=int, default=0, help='Flag to apply soft_threshold in fft contrast ')
-
-
 
 # additional configs:
 parser.add_argument('--pretrained', default='', type=str,
@@ -279,19 +274,10 @@ def setup_logging_and_wandb(args):
             f'_dn{args.contrast_amplitude_lambda}_{args.dataset_name}'
             f'{args.image_size}_{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}'
             f'_b{args.apply_blur}c{args.apply_color}cs{args.apply_contrast}'
-            f'_T_{args.time_order}_percentile{args.apply_contrast_by_percentile}_seed_{args.seed}'
+            f'_T_{args.time_order}_seed_{args.seed}'
         ) 
     else:
         net_name = f'{args.arch}_{args.dataset_name}_{args.image_size}_{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}_seed_{args.seed}'
-    
-    if not args.blur_aug:
-        net_name += f'_no_blur_aug' #* just debug
-    if not args.additional_aug:
-        net_name += f'_no_adi_aug' #* just for contol
-    if args.apply_threshold_color:
-        net_name += f'_threshold_color'
-    if args.soft_threshold:
-        net_name += '_soft'
 
     wandb_run = None
 
@@ -523,9 +509,7 @@ def main():
     # 5) Get data loaders
     train_loader, val_loader, train_sampler, val_sampler = get_data_loaders(args)
     print(f"len loaders : {len(train_loader)}  |  {len(val_loader)} |")
-    # import pdb;pdb.set_trace()
-    #TODO fix len(val_loader) is 0
-    
+
 
     # 6) Optionally only evaluate
     if args.evaluate:
@@ -543,7 +527,6 @@ def main():
         criterion = dvd.utils.get_loss_function(args)
     except:
         criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing).cuda(args.gpu)
-
 
     # Generate age months curve to map batches to age months for DVD
     age_months_curve = dvd.dvd.development.generate_age_months_curve(

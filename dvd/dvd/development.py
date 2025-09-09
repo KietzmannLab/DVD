@@ -72,23 +72,23 @@ class DVDTransformer:
         def T(age: float, a: float, b: float, alpha: float) -> float:
             return a * age ** (-alpha) + b * age ** alpha
 
-        def custom_average_color_mix(age_m: float) -> float:
+        def average_color_sensitivity(age_m: float) -> float:
             age_years = age_m / 12.0
             param = color_params["AverageRGBDevelop"]
             a, b, alpha = param["a"], param["b"], param["alpha"]
             min_age = color_params["min_sensitivity_threshold_ages"]
             return (T(min_age, a, b, alpha) / T(age_years, a, b, alpha)) if age_years != 0 else 0.0
 
-        return custom_average_color_mix(age_months)
+        return average_color_sensitivity(age_months)
 
     def get_contrast_sensitivity_development(
         self,
         age_months: float,
-        age50: float = 4.8 * 12,
+        age50: float = 4.8 * 12, 
         n: float = 2.1633375920569247,
     ) -> float:
         """Returns normalized contrast sensitivity development in [0,1]."""
-        y_max = (300 ** n) / (300 ** n + age50 ** n)  # Max at ~25 years (300 months)
+        y_max = (300 ** n) / (300 ** n + age50 ** n)  # at ~25 years (300 months)
         return (age_months ** n) / (age_months ** n + age50 ** n) / y_max  # Range [0, 1]
 
     # ---------- Public call ----------
