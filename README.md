@@ -107,25 +107,24 @@ This project makes use of several datasets:
 | **Ecoset** | A natural image dataset introduced in Mehrer et al., 2021                 | [Ecoset Website](https://www.kietzmannlab.org/ecoset/) |
 | **ImageNet** | Our models were also trained on the initial release of ImageNet         | [ImageNet Website](https://www.image-net.org/) |
 
-## 5 Training with DVD
+## 5 Training with DVD | Example
 
 ```bash
 python scripts/main.py \
-  --dataset-name ecoset --data-root /datasets \
-  --arch resnet50 --epochs 300 --batch-size 512 --image-size 256 \
-  --lr 1e-4 --lr-scheduler fixed \
-  --development_strategy dvd --months_per_epoch 2 --time_order chronological \
-  --apply_blur --apply_color --apply_contrast \
-  --contrast_amplitude_beta 0.1 --contrast_amplitude_lambda 150
+  --arch resnet50 --epochs 150 \
+  --dataset-name imagenet --data-root /share/klab/datasets \
+  --batch-size-per-gpu 512 --image-size 256 \
+  --development_strategy dvd --months_per_epoch 2 \
+  --contrast_amplitude_beta 1e-4 --contrast_amplitude_lambda 150
 ```
 
 | Flag                     | Purpose                                             |
 |--------------------------|-----------------------------------------------------|
 | `--development_strategy` | `dvd` (full curriculum) or `adult` (control).       |
-| `--months_per_epoch`     | Virtual ageing per epoch (smaller = finer).         |
+| `--months_per_epoch`     | virtual ageing per epoch (smaller = finer).         |
 | `--time_order`           | `chronological`, `fully_random`.                    |
-| `--apply_*`              | Toggle acuity / colour / contrast sensitivities.    |
-| `--contrast_amplitude_*` | Fine-tune frequency amplitude thresholding.         |
+| `--apply_*`              | toggle acuity / colour / contrast sensitivities.    |
+| `--contrast_amplitude_*` | control the reference amplitude threshold in FFT.   |
 
 
 ## 6 Core API
