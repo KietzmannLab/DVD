@@ -10,7 +10,7 @@ pre-processing pipeline:
 3. **Chromatic sensitivity** → grayscale interpolation or ΔE thresholding
 ##########################
 """
-
+import math
 import torch
 import random
 import numpy as np
@@ -26,7 +26,8 @@ class DVDConfig:
     apply_blur: int = 1
     apply_color: int = 1
     apply_contrast: int = 1
-    contrast_threshold: float = 0.2
+    contrast_amplitude_beta: float = 0.2 
+    contrast_amplitude_lam: float = 150.0,  
     apply_threshold_color: bool = False
     image_size: int = 224
     fully_random: bool = False
@@ -149,11 +150,13 @@ class DVDTransformer:
                 age_m = random.choice(cfg.age_months_curve) if cfg.fully_random and cfg.age_months_curve else age_m
                 contrast_sensitivity = self.get_contrast_sensitivity_development(age_m) + 1e-10
 
-                # Simple hard threshold in linear power domain
                 fft_channels = [torch.fft.fft2(img[:, i, :, :]) for i in range(3)]
                 power_spectra = [torch.abs(fc) ** 2 for fc in fft_channels]
                 max_power = max(ps.max() for ps in power_spectra)
-                threshold = 0.001 * max_power * cfg.contrast_threshold * (1 - contrast_sensitivity) 
+                
+                mapping_factor = max(1, 2 * (age_months // cfg.contrast_amplitude_lam))  # Age-dependent mapping factor max(⌊t/λ⌋*2, 1)
+                reference_magnitude = max_power * cfg.contrast_amplitude_beta  / mapping_factor  # Base magnitude (reference threshold at that age) 
+                threshold = reference_magnitude * (1 - contrast_sensitivity) # Final threshold: scaled by contrast sensitivity
 
                 fft_filtered = [
                     fc * (ps >= threshold) for fc, ps in zip(fft_channels, power_spectra)

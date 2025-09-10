@@ -22,7 +22,7 @@ import dvd.dvd.development
 import dvd.models.loader
 import dvd.models.eval
 from dvd.datasets.dataset_loader import SupervisedLearningDataset
-from dvd.dvd.development import DVDTransformer, DVDConfig, AgeCurve
+from dvd.dvd.development import DVDTransformer, DVDConfig
 
 torchvision_model_names = sorted(
     name
@@ -125,7 +125,7 @@ parser.add_argument(
 
 parser.add_argument(
     "--optimizer",
-    default="lars",
+    default="adam",
     type=str,
     choices=["lars", "adamw", "adam"],
     help="optimizer used (default: lars)",
@@ -171,7 +171,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--contrast_amplitude_beta",
-    default=0.1,
+    default=1e-4,
     type=float,
     help="beta in the paper, determines the base amplitude threshold in the frequency domain to map the initial contrast sensitivity in the spatial domain at birth,",
 )
@@ -417,9 +417,9 @@ def train(
             # Get age in months (for DVD transformations) | epoch start from 1 so -1
             age_months = age_months_curve[ epoch* len(train_loader) + i]
             dvdt =  DVDTransformer(DVDConfig(
-                                    blur=args.apply_blur, color=args.apply_color, contrast=args.apply_contrast,
-                                    beta=args.contrast_amplitude_beta, lam=args.contrast_amplitude_lambda, 
-                                    threshold_color=args.apply_threshold_color,
+                                    apply_blur=args.apply_blur, apply_color=args.apply_color, apply_contrast=args.apply_contrast,
+                                    contrast_amplitude_beta=args.contrast_amplitude_beta, contrast_amplitude_lam=args.contrast_amplitude_lambda, 
+                                    apply_threshold_color=args.apply_threshold_color,
                                     image_size=args.image_size,
                                     fully_random = args.time_order == "fully_random",
                                     age_months_curve = age_months_curve,
