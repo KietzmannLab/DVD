@@ -130,11 +130,11 @@ python scripts/main.py \
 ## 6 Core API
 
 ```python
-from dvd.dvd.development import DVDTransformer, DVDConfig, AgeCurve
+from dvd.dvd.development import DVDTransformer, DVDConfig, generate_age_months_curve
 
 # Initialize transformer and generate age mapping curve
 dvdt = DVDTransformer(DVDConfig())
-age_curve = AgeCurve.generate(
+age_curve = generate_age_months_curve(
     epochs=args.epochs,
     steps_per_epoch=len(train_loader),
     months_per_epoch=args.months_per_epoch,
