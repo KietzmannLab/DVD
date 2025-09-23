@@ -118,14 +118,13 @@ python scripts/main.py \
   --contrast_amplitude_beta 1e-4 --contrast_amplitude_lambda 150
 ```
 
-| Flag                     | Purpose                                             |
-|--------------------------|-----------------------------------------------------|
-| `--development_strategy` | `dvd` (full curriculum) or `adult` (control).       |
-| `--months_per_epoch`     | virtual ageing per epoch (smaller = finer).         |
-| `--time_order`           | `chronological`, `fully_random`.                    |
-| `--apply_*`              | toggle acuity / colour / contrast sensitivities.    |
-| `--contrast_amplitude_*` | control the reference amplitude threshold in FFT.   |
-
+| Flag                     | Purpose                                                                 |
+|--------------------------|-------------------------------------------------------------------------|
+| `--development_strategy` | `dvd` (full curriculum) or `adult` (control).                           |
+| `--months_per_epoch`     | Virtual ageing per epoch (smaller = finer). Example: DVD-P = 4, DVD-B = 2, DVD-S = 1 |
+| `--time_order`           | `chronological` or `fully_random`.                                      |
+| `--apply_*`              | Toggle acuity / colour / contrast sensitivities.                        |
+| `--contrast_amplitude_*` | Control the reference amplitude threshold in FFT.                       |
 
 ## 6 Core API
 
