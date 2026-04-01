@@ -192,37 +192,19 @@ def remove_prefix(state_dict: dict) -> dict:
     return new_state
     
 def load_pretrained_weights_if_any(args, model, linear_keyword):
-    """
-    Loads pretrained weights into model if args.pretrained is specified.
-    """
-    if args.pretrained:
-        if os.path.isfile(args.pretrained):
-            print("=> loading checkpoint '{}'".format(args.pretrained))
-            checkpoint = torch.load(args.pretrained, map_location="cpu")
+    if not args.pretrained:
+        return
+    if not os.path.isfile(args.pretrained):
+        print(f"=> no checkpoint found at '{args.pretrained}'")
+        return
 
-            try:
-                model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
-            except:
-                model.load_state_dict(checkpoint["state_dict"])
-            for k in list(state_dict.keys()):
-                # retain only base_encoder up to before the embedding layer
-                if k.startswith("module.encoder") and not k.startswith(
-                    "module.encoder.%s" % linear_keyword
-                ):
-                    # remove prefix
-                    state_dict[k[len("module.encoder.") :]] = state_dict[k]
-                # delete renamed or unused k
-                del state_dict[k]
+    print(f"=> loading checkpoint '{args.pretrained}'")
+    checkpoint = torch.load(args.pretrained, map_location="cpu")
+    state_dict = checkpoint.get("state_dict", checkpoint)
+    state_dict = remove_prefix(state_dict)
 
-            msg = model.load_state_dict(state_dict, strict=False)
-            assert set(msg.missing_keys) == {
-                "%s.weight" % linear_keyword,
-                "%s.bias" % linear_keyword,
-            }
-
-            print("=> loaded pre-trained model '{}'".format(args.pretrained))
-        else:
-            print("=> no checkpoint found at '{}'".format(args.pretrained))
+    msg = model.load_state_dict(state_dict, strict=False)
+    print(f"=> loaded '{args.pretrained}' (missing={len(msg.missing_keys)}, unexpected={len(msg.unexpected_keys)})")
 
 
 def build_optimizer_and_scaler(args, model):
@@ -233,8 +215,10 @@ def build_optimizer_and_scaler(args, model):
     args.lr = args.lr * args.batch_size_per_gpu / 512 # For SimCLR,  256 is default
 
     model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-    model.cuda()
-    model = torch.nn.parallel.DistributedDataParallel(model)
+    model.cuda(args.gpu)
+    model = torch.nn.parallel.DistributedDataParallel(
+        model, device_ids=[args.gpu], output_device=args.gpu, broadcast_buffers=False
+    )
 
     if args.optimizer == "lars":
         optimizer = dvd.simclr.optimizer.LARS(
@@ -252,7 +236,9 @@ def build_optimizer_and_scaler(args, model):
     else:
         raise ValueError(f"Unknown optimizer {args.optimizer}")
 
-    scaler = torch.cuda.amp.GradScaler()
+    # scaler = torch.cuda.amp.GradScaler()
+    # bf16 autocast does NOT need scaling; keep a no-op scaler so resume/save code doesn't break
+    scaler = torch.cuda.amp.GradScaler(enabled=False)
     return model, optimizer, scaler
 
 
@@ -272,12 +258,15 @@ def resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir):
                 loc = "cuda:{}".format(args.gpu)
                 checkpoint = torch.load(args.resume, map_location=loc)
             args.start_epoch = checkpoint["epoch"]
+
+            state_dict = checkpoint.get("state_dict", checkpoint)
             try:
-                model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
+                model.load_state_dict(remove_prefix(state_dict))
             except:
-                model.load_state_dict(checkpoint["state_dict"])
+                model.load_state_dict(state_dict)
             optimizer.load_state_dict(checkpoint["optimizer"])
-            scaler.load_state_dict(checkpoint["scaler"])
+            if checkpoint.get("scaler") is not None:
+                scaler.load_state_dict(checkpoint["scaler"])
             logger.info(
                 "Loaded checkpoint '{}' (epoch {})".format(
                     args.resume, checkpoint["epoch"]
@@ -323,8 +312,8 @@ def load_checkpoint(model, model_path=None, optimizer=None, log_dir=None, args=N
             try:
                 model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
             except:
-                model.load_state_dict(checkpoint["state_dict"])
-            model.load_state_dict(state_dict, strict=True)
+                # model.load_state_dict(checkpoint["state_dict"])
+                model.load_state_dict(checkpoint["state_dict"], strict=True)
             if optimizer and "optimizer" in checkpoint:
                 optimizer.load_state_dict(checkpoint["optimizer"])
             if 'best_acc1' in checkpoint:
@@ -364,7 +353,8 @@ def resume_latest_checkpoint(args, model, optimizer, scaler, logger, log_dir):
         except:
             model.load_state_dict(remove_prefix(checkpoint["state_dict"]))
         optimizer.load_state_dict(checkpoint["optimizer"])
-        scaler.load_state_dict(checkpoint["scaler"])
+        if checkpoint.get("scaler") is not None:
+            scaler.load_state_dict(checkpoint["scaler"])
         args.start_epoch = checkpoint["epoch"]
         if "best_acc1" in checkpoint:
             args.best_acc1 = checkpoint["best_acc1"]    
@@ -414,7 +404,8 @@ def resume_latest_checkpoint(args, model, optimizer, scaler, logger, log_dir):
     except:
         model.load_state_dict(checkpoint["state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer"])
-    scaler.load_state_dict(checkpoint["scaler"])
+    if checkpoint.get("scaler") is not None:
+        scaler.load_state_dict(checkpoint["scaler"])
     logger.info(f"Successfully loaded checkpoint '{checkpoint_path}' (epoch {checkpoint['epoch']})")
 
 

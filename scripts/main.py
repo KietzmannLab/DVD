@@ -131,7 +131,7 @@ parser.add_argument(
     help="optimizer used (default: lars)",
 )
 parser.add_argument(
-    "--warmup-epochs", default=10, type=int, metavar="N", help="number of warmup epochs (default None)"
+    "--warmup-epochs", default=0, type=int, metavar="N", help="number of warmup epochs (default None)"
 )
 parser.add_argument(
     "--save-checkpoint-every-epochs",
@@ -151,7 +151,7 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
 parser.add_argument('--image-size', type=int, default=256)
 
 # Setting for development strategy
-parser.add_argument('--development-strategy',
+parser.add_argument('--development_strategy',
                     default='adult', 
                     type=str, 
                     help='development strategy (default: dvd)',
@@ -164,7 +164,7 @@ parser.add_argument(
     help="time order of the batches",
 )
 parser.add_argument(
-    "--months-per-epoch",
+    "--months_per_epoch",
     default=2,
     type=float,
     help="number of months per epoch",
@@ -402,6 +402,9 @@ def train(
             learning_rates.update(lr)
         elif args.lr_scheduler == '':
             lr = args.lr
+            for pg in optimizer.param_groups:
+                pg["lr"] = lr
+            learning_rates.update(lr)
         else:
             raise NotImplementedError(
                 f"Development strategy {args.lr_scheduler} not implemented"
@@ -434,7 +437,10 @@ def train(
             )
 
         # compute output
-        with torch.cuda.amp.autocast(True):
+        # with torch.cuda.amp.autocast(True):
+        #     output = model(images)
+        #     loss = criterion(output, target)
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
             output = model(images)
             loss = criterion(output, target)
 
@@ -461,10 +467,14 @@ def train(
             logger.info(metrics)
 
         # compute gradient and do SGD step
-        optimizer.zero_grad()
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
+        # optimizer.zero_grad()
+        # scaler.scale(loss).backward()
+        # scaler.step(optimizer)
+        # scaler.update()
+
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -485,8 +495,8 @@ def main():
     dvd.models.loader.load_pretrained_weights_if_any(args, model, linear_keyword)
     
     # Optionally compile the model (PyTorch 2.0+) to speed up training
-    if hasattr(torch, "compile"):
-        model = torch.compile(model)
+    # if hasattr(torch, "compile"):
+    #     model = torch.compile(model)
 
     # 3) Build optimizer and FP16 scaler
     model, optimizer, scaler = dvd.models.loader.build_optimizer_and_scaler(args, model)
@@ -512,6 +522,10 @@ def main():
 
 
     # 6) Optionally only evaluate
+    try:
+        criterion = dvd.utils.get_loss_function(args)
+    except:
+        criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing).cuda(args.gpu)
     if args.evaluate:
         dvd.models.eval.validate(val_loader, model, criterion, epoch, args.gpu)
         return
@@ -523,11 +537,7 @@ def main():
     logger.info("Starting model training.")
 
     best_acc1 = args.best_acc1
-    try:
-        criterion = dvd.utils.get_loss_function(args)
-    except:
-        criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing).cuda(args.gpu)
-
+    
     # Generate age months curve to map batches to age months for DVD
     age_months_curve = dvd.dvd.development.generate_age_months_curve(
         args.epochs,

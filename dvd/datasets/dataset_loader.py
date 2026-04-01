@@ -3,7 +3,7 @@ from PIL import Image
 import h5py
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, get_worker_info
 
 import torch.nn as nn
 import torchvision
@@ -829,52 +829,55 @@ class ContrastiveLearningDataset:
 
 
 class Ecoset(Dataset):
-    """
-    Example dataset class for Ecoset, similar to your original code.
-    Note: This class is simplified and only demonstrates reading data.
-    """
-
     def __init__(self, split, dataset_path, transform=None, in_memory=False):
-        """
-        Args:
-            dataset_path (string): Path to the .h5 file
-            transform (callable, optional): Optional transforms to be applied on a sample.
-            in_memory (bool): Whether to preload the entire dataset into memory.
-        """
         self.dataset_path = dataset_path
         self.split = split
         self.transform = transform
         self.in_memory = in_memory
 
+        self._h5 = None
+        self._images = None
+        self._labels = None
+
         if self.in_memory:
-            # Load entire dataset into memory
             with h5py.File(self.dataset_path, "r") as f:
-                self.images = torch.from_numpy(f[split]['data'][()]).permute(0, 3, 1, 2)
-                self.labels = torch.from_numpy(f[split]['labels'][()].astype(np.int64))
+                self.images = torch.from_numpy(f[split]["data"][()]).permute(0, 3, 1, 2)
+                self.labels = torch.from_numpy(f[split]["labels"][()].astype(np.int64))
         else:
-            # Lazy load
-            self.h5_ref = h5py.File(self.dataset_path, "r")[split]
-            self.images = self.h5_ref['data']
-            self.labels = self.h5_ref['labels']
+            # only read length without keeping handle
+            with h5py.File(self.dataset_path, "r") as f:
+                self._len = f[split]["labels"].shape[0]
+
+    def _init_h5(self):
+        if self._h5 is None:
+            self._h5 = h5py.File(self.dataset_path, "r")
+            grp = self._h5[self.split]
+            self._images = grp["data"]
+            self._labels = grp["labels"]
 
     def __len__(self):
-        return len(self.labels)
+        return len(self.labels) if self.in_memory else self._len
 
     def __getitem__(self, idx):
         if self.in_memory:
             img = self.images[idx]
             label = self.labels[idx]
         else:
-            # On-the-fly access
-            img = torch.from_numpy(np.asarray(self.images[idx])).permute((2, 0, 1))
-            # label = torch.from_numpy(np.asarray(self.labels[idx])).long()
-            label = torch.from_numpy(np.asarray(self.labels[idx]).astype(np.int64))
+            self._init_h5()
+            img = torch.from_numpy(np.asarray(self._images[idx])).permute(2, 0, 1)
+            label = int(self._labels[idx])
 
         if self.transform:
             img = self.transform(img)
+        return img, torch.tensor(label, dtype=torch.long)
 
-        return img, label
-
+    def __del__(self):
+        if self._h5 is not None:
+            try:
+                self._h5.close()
+            except Exception:
+                pass
+            
 class COCOSplitH5Dataset(Dataset):
     """
     Dataset class for coco-split515.h5, with train/val/test splits.
