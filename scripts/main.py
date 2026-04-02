@@ -1,13 +1,15 @@
-
 import argparse
 import math
 import os
 import sys
 import time
 import yaml
-import wandb 
+import wandb
 import logging
+import random
+import numpy as np
 from logging.config import fileConfig
+
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -23,6 +25,7 @@ import dvd.models.loader
 import dvd.models.eval
 from dvd.datasets.dataset_loader import SupervisedLearningDataset
 from dvd.dvd.development import DVDTransformer, DVDConfig
+
 
 torchvision_model_names = sorted(
     name
@@ -40,7 +43,7 @@ parser = argparse.ArgumentParser(description="Model Training")
 parser.add_argument("data", metavar="DIR", help="path to dataset")
 parser.add_argument(
     "--dataset-name",
-    default="texture2shape_miniecoset", 
+    default="texture2shape_miniecoset",
     type=str,
     help="dataset name",
 )
@@ -139,7 +142,6 @@ parser.add_argument(
     type=int,
     help="Save Frequency (default: 5)",
 )
-# world_size
 parser.add_argument(
     "--world-size",
     default=1,
@@ -152,8 +154,8 @@ parser.add_argument('--image-size', type=int, default=256)
 
 # Setting for development strategy
 parser.add_argument('--development_strategy',
-                    default='adult', 
-                    type=str, 
+                    default='adult',
+                    type=str,
                     help='development strategy (default: dvd)',
                     )
 parser.add_argument(
@@ -192,7 +194,6 @@ parser.add_argument('--apply_contrast', type=int, default=1, help='Flag to apply
 parser.add_argument('--pretrained', default='', type=str,
                     help='path to start from pretrained checkpoint')
 
-# class_weights_json_path
 parser.add_argument(
     "--class-weights-json-path",
     default=None,
@@ -207,39 +208,37 @@ parser.add_argument(
     help="Label smoothing to apply in cross-entropy loss (default: 0.0)",
 )
 
-# resize to 224
 parser.add_argument(
     "--resize_to_224",
     default=0,
     type=int,
     help="Resize images to 224x224",
-) # args.resize_to_224
+)
 parser.add_argument(
     "--resize_to_256",
     default=0,
     type=int,
     help="Resize images to 256x256",
-) # args.resize_to_256
+)
 
-# no grayscale
 parser.add_argument(
     "--grayscale-aug",
     default=1,
     type=int,
     help="apply grayscale transformation",
-) # args.grayscale_aug
+)
 parser.add_argument(
     "--blur-aug",
     default=1,
     type=int,
     help="apply blur transformation",
-) # args.blur_aug # 
+)
 parser.add_argument(
     "--additional-aug",
     default=1,
     type=int,
     help="apply blur transformation",
-) # args.blur_aug
+)
 parser.add_argument(
     "--crop-min",
     default=1.0,
@@ -247,26 +246,24 @@ parser.add_argument(
     help="minimum scale for random cropping (default: 1.0 or 0.08)",
 )
 
-# best_acc1
 parser.add_argument("--best-acc1", default=0.0, type=float,
                     help="Best accuracy achieved so far")
+
 
 def setup_logging_and_wandb(args):
     """
     Sets up logging and initializes WandB run if main process.
     Returns logger, wandb_run (or None), and log_dir.
     """
-    # Initialize distributed training
     dvd.utils.init_distributed_mode(args)
     dvd.utils.fix_random_seeds(args.seed)
-    # If you really want bit-for-bit reproducibility (slower), enable:
-    # cudnn.deterministic = True
-    cudnn.benchmark = True # find the best algorithm to use for your hardware, but it can introduce some variability
 
-    # Setup logging
+    cudnn.deterministic = True
+    cudnn.benchmark = False
+
     fileConfig("dvd/models/logging/config.ini")
     logger = logging.getLogger()
-    logger.disabled = True  # Will enable if main process
+    logger.disabled = True
 
     if args.development_strategy == 'dvd':
         net_name = (
@@ -275,9 +272,12 @@ def setup_logging_and_wandb(args):
             f'{args.image_size}_{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}'
             f'_b{args.apply_blur}c{args.apply_color}cs{args.apply_contrast}'
             f'_T_{args.time_order}_seed_{args.seed}'
-        ) 
+        )
     else:
-        net_name = f'{args.arch}_{args.dataset_name}_{args.image_size}_{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}_seed_{args.seed}'
+        net_name = (
+            f'{args.arch}_{args.dataset_name}_{args.image_size}_'
+            f'{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}_seed_{args.seed}'
+        )
 
     wandb_run = None
 
@@ -285,7 +285,12 @@ def setup_logging_and_wandb(args):
         log_dir = f'logs/{net_name}'
         os.makedirs(log_dir, exist_ok=True)
 
-        wandb.init(project="final_early_visual_development", name=net_name, config=vars(args), dir=log_dir)
+        wandb.init(
+            project="final_early_visual_development",
+            name=net_name,
+            config=vars(args),
+            dir=log_dir,
+        )
         wandb_run = wandb.run
 
         FileOutputHandler = logging.FileHandler(
@@ -305,18 +310,17 @@ def setup_logging_and_wandb(args):
 
 def stack_collate(batch):
     imgs, labels = zip(*batch)
-    # imgs = [img if torch.is_tensor(img) else torch.tensor(img) for img in imgs]
     labels = [lbl if torch.is_tensor(lbl) else torch.tensor(lbl) for lbl in labels]
-    return torch.stack(imgs,   dim=0), \
-           torch.stack(labels, dim=0)
-    
+    return torch.stack(imgs, dim=0), torch.stack(labels, dim=0)
+
+
 def get_data_loaders(args):
     """
-    Retrieves the training and validation datasets and wraps them into DataLoaders 
+    Retrieves the training and validation datasets and wraps them into DataLoaders
     with distributed sampling.
     """
     dataset_name = args.dataset_name
-    dataset = SupervisedLearningDataset(args.data, args) # Load dataset from path (args.data) & all
+    dataset = SupervisedLearningDataset(args.data, args)
     dataset = dataset.get_dataset(dataset_name)
     train_dataset, val_dataset, _ = dataset["train"], dataset["val"], dataset["test"]
 
@@ -325,9 +329,8 @@ def get_data_loaders(args):
     print(f"train_sampler: {train_sampler}")
     print(f"val_sampler: {val_sampler}")
 
-    # 3) decide if we need our custom collate *only* for ImageNet
     is_imagenet = (dataset_name == 'imagenet')
-    collate_fn  = stack_collate if is_imagenet else None
+    collate_fn = stack_collate if is_imagenet else None
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -340,14 +343,14 @@ def get_data_loaders(args):
         **({'collate_fn': collate_fn} if collate_fn else {})
     )
 
-    val_loader =  torch.utils.data.DataLoader(
+    val_loader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=args.batch_size_per_gpu,
         shuffle=None,
         num_workers=args.workers,
         pin_memory=True,
         sampler=val_sampler,
-        drop_last=False,                 # <-- changed #* for small dataset, num/2<512 cannot drop
+        drop_last=False,
         **({'collate_fn': collate_fn} if collate_fn else {})
     )
 
@@ -365,7 +368,6 @@ def train(
     epoch,
     age_months_curve,
     args,
-    
 ):
     batch_time = dvd.utils.AverageMeter("Time", ":6.3f")
     data_time = dvd.utils.AverageMeter("Data", ":6.3f")
@@ -374,27 +376,22 @@ def train(
     top1 = dvd.utils.AverageMeter("Acc@1", ":6.2f")
     top5 = dvd.utils.AverageMeter("Acc@5", ":6.2f")
 
-    # Progress meter display settings
     progress = dvd.utils.ProgressMeter(
         len(train_loader),
         [batch_time, data_time, learning_rates, losses, top1, top5],
         prefix="Epoch: [{}]".format(epoch),
     )
 
-    # switch to train mode
     model.train()
 
     end = time.time()
     iters_per_epoch = len(train_loader)
 
     for i, (images, target) in enumerate(train_loader):
-        # global step
         it = len(train_loader) * epoch + i
 
-        # measure data loading time
         data_time.update(time.time() - end)
 
-        # adjust learning rate
         if args.lr_scheduler == 'cosine':
             lr = dvd.utils.adjust_learning_rate(
                 optimizer, epoch + i / iters_per_epoch, args
@@ -415,19 +412,21 @@ def train(
         if torch.cuda.is_available():
             target = target.cuda(args.gpu, non_blocking=True)
 
-        # Experience across visual development
         if args.development_strategy == "dvd":
-            # Get age in months (for DVD transformations) | epoch start from 1 so -1
-            age_months = age_months_curve[ epoch* len(train_loader) + i]
-            dvdt =  DVDTransformer(DVDConfig(
-                                    apply_blur=args.apply_blur, apply_color=args.apply_color, apply_contrast=args.apply_contrast,
-                                    contrast_amplitude_beta=args.contrast_amplitude_beta, contrast_amplitude_lam=args.contrast_amplitude_lambda, 
-                                    apply_threshold_color=args.apply_threshold_color,
-                                    image_size=args.image_size,
-                                    fully_random = args.time_order == "fully_random",
-                                    age_months_curve = age_months_curve,
-                                )
-                            )
+            age_months = age_months_curve[epoch * len(train_loader) + i]
+            dvdt = DVDTransformer(
+                DVDConfig(
+                    apply_blur=args.apply_blur,
+                    apply_color=args.apply_color,
+                    apply_contrast=args.apply_contrast,
+                    contrast_amplitude_beta=args.contrast_amplitude_beta,
+                    contrast_amplitude_lam=args.contrast_amplitude_lambda,
+                    apply_threshold_color=args.apply_threshold_color,
+                    image_size=args.image_size,
+                    fully_random=(args.time_order == "fully_random"),
+                    age_months_curve=age_months_curve,
+                )
+            )
             images = dvdt(images, age_months)
         elif args.development_strategy == "adult":
             pass
@@ -436,28 +435,23 @@ def train(
                 f"Development strategy {args.development_strategy} not implemented"
             )
 
-        # compute output
-        # with torch.cuda.amp.autocast(True):
-        #     output = model(images)
-        #     loss = criterion(output, target)
-        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+        optimizer.zero_grad(set_to_none=True)
+
+        with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
             output = model(images)
             loss = criterion(output, target)
 
-        # measure accuracy and record loss
         acc1, acc5 = dvd.utils.accuracy(output, target, topk=(1, 5))
         losses.update(loss.item(), images.size(0))
         top1.update(acc1[0], images.size(0))
         top5.update(acc5[0], images.size(0))
 
-        # Log with wandb if main process
         if dvd.utils.is_main_process() and wandb_run is not None and it % args.log_freq == 0:
             wandb.log(
                 {
                     "train/loss": loss.item(),
                     "train/top1": acc1[0].item(),
                     "train/top5": acc5[0].item(),
-                    "train/loss": loss.item(),
                     "lr": lr,
                     "epoch": epoch,
                 },
@@ -466,68 +460,59 @@ def train(
             metrics = progress.display(i)
             logger.info(metrics)
 
-        # compute gradient and do SGD step
-        # optimizer.zero_grad()
-        # scaler.scale(loss).backward()
-        # scaler.step(optimizer)
-        # scaler.update()
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            optimizer.step()
 
-        optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        optimizer.step()
-
-        # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
 
     print(f"Epoch {epoch} time: {batch_time.sum} seconds")
 
+
 def main():
     args = parser.parse_args()
 
-    # 1) Setup logging, distributed, and wandb
     logger, wandb_run, log_dir, net_name = setup_logging_and_wandb(args)
     if dvd.utils.is_main_process() and log_dir is not None:
-        dvd.utils.save_config(args, os.path.join(log_dir, f"config.yaml")) # Saving config setup
+        dvd.utils.save_config(args, os.path.join(log_dir, "config.yaml"))
 
-    # 2) Create and setup model
     model, linear_keyword = dvd.models.loader.create_model(args, logger)
     dvd.models.loader.load_pretrained_weights_if_any(args, model, linear_keyword)
-    
-    # Optionally compile the model (PyTorch 2.0+) to speed up training
-    # if hasattr(torch, "compile"):
-    #     model = torch.compile(model)
 
-    # 3) Build optimizer and FP16 scaler
     model, optimizer, scaler = dvd.models.loader.build_optimizer_and_scaler(args, model)
-    if dvd.utils.is_main_process() and log_dir is not None:
-        dvd.utils.save_initial_checkpoint(log_dir, args, model, optimizer, scaler, logger, net_name) 
-            
-    # 4) Possibly resume checkpoint
-    if dvd.utils.is_main_process() and log_dir is not None:
-        dvd.models.loader.resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir)
 
-    # Prepare to log stats if main process
+    dvd.models.loader.resume_checkpoint_if_any(
+        args, model, optimizer, scaler, logger, log_dir
+    )
+
+    if dvd.utils.is_main_process() and log_dir is not None and args.start_epoch == 0:
+        dvd.utils.save_initial_checkpoint(
+            log_dir, args, model, optimizer, scaler, logger, net_name
+        )
+
     if dvd.utils.is_main_process() and log_dir is not None:
         stats_file = open(os.path.join(log_dir, "stats.txt"), "a", buffering=1)
         logger.info(" ".join(sys.argv))
         print(" ".join(sys.argv), file=stats_file)
         with open(os.path.join(log_dir, "metadata.txt"), "a") as f:
-            yaml.dump(args, f, allow_unicode=True)
+            yaml.dump(vars(args), f, allow_unicode=True)
             f.write(str(model))
-        
-    # 5) Get data loaders
+
     train_loader, val_loader, train_sampler, val_sampler = get_data_loaders(args)
     print(f"len loaders : {len(train_loader)}  |  {len(val_loader)} |")
 
-
-    # 6) Optionally only evaluate
     try:
         criterion = dvd.utils.get_loss_function(args)
-    except:
+    except Exception:
         criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing).cuda(args.gpu)
+
     if args.evaluate:
-        dvd.models.eval.validate(val_loader, model, criterion, epoch, args.gpu)
+        dvd.models.eval.validate(val_loader, model, criterion, args.start_epoch, args.gpu)
         return
 
     logger.info("Main components ready.")
@@ -537,8 +522,7 @@ def main():
     logger.info("Starting model training.")
 
     best_acc1 = args.best_acc1
-    
-    # Generate age months curve to map batches to age months for DVD
+
     age_months_curve = dvd.dvd.development.generate_age_months_curve(
         args.epochs,
         len(train_loader),
@@ -551,8 +535,6 @@ def main():
     for epoch in range(args.start_epoch, args.epochs):
         train_sampler.set_epoch(epoch)
 
-        
-        # train for one epoch
         train(
             train_loader,
             model,
@@ -566,8 +548,9 @@ def main():
             args,
         )
 
-        # evaluate on validation set
-        acc1, _ = dvd.models.eval.validate(val_loader, model, criterion, epoch, args.gpu, wandb_run, logger)
+        acc1, _ = dvd.models.eval.validate(
+            val_loader, model, criterion, epoch, args.gpu, wandb_run, logger
+        )
         is_best = acc1 > best_acc1
         best_acc1 = max(acc1, best_acc1)
 
@@ -577,24 +560,30 @@ def main():
                 filename = f"checkpoint_{epoch}.pth"
 
             checkpoint_dict = {
-                    "epoch": epoch,
-                    "arch": args.arch,
-                    "state_dict": model.state_dict(),
-                    "optimizer": optimizer.state_dict(),
-                    "scaler": scaler.state_dict(),
-                }
+                "epoch": epoch,
+                "arch": args.arch,
+                "state_dict": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "scaler": scaler.state_dict() if scaler is not None else None,
+                "best_acc1": best_acc1,
+                "torch_rng_state": torch.get_rng_state(),
+                "cuda_rng_state_all": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+                "numpy_rng_state": np.random.get_state(),
+                "python_rng_state": random.getstate(),
+            }
+
             dvd.utils.save_checkpoint(
                 checkpoint_dict,
                 is_best=is_best,
-                filename=os.path.join(log_dir, 'weights', filename),
+                filename=os.path.join(log_dir, "weights", filename),
             )
             dvd.utils.save_last_checkpoint(
                 checkpoint_dict,
-                filename=os.path.join(log_dir, 'weights', "checkpoint_last.pth"),
+                filename=os.path.join(log_dir, "weights", "checkpoint_last.pth"),
             )
 
     if dvd.utils.is_main_process():
-        wandb.finish()  
+        wandb.finish()
 
 
 if __name__ == "__main__":
