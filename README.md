@@ -1,153 +1,146 @@
+# Scale-Free Developmental Visual Diet (DVD)
+
+[![arXiv](https://img.shields.io/badge/arXiv-2507.03168-b31b1b.svg)](https://arxiv.org/abs/2507.03168)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ![DVD pipeline overview](./assets/DVD_pipeline.png)
 
-# Adopting a human developmental visual diet (DVD) diet yields robust, shape-based AI vision
-
-A plug-and-play training curriculum that progressively “ages” each image, mimicking the evolving visual sensitivities of the human visual system, from immature newborn vision through to mature adulthood.
+DVD is a **plug-and-play training curriculum** that progressively "ages" input images. By mimicking the maturation of the human visual system, from the blurry, low-contrast world of an infant to the high-fidelity vision of an adult, DVD bridges the gap between biological learning and Artificial Neural Networks (ANNs).
 
 ---
 
-## 1 Why Developmental Visual Diet (DVD)?
+## 💡 Why DVD?
 
-* Human vision begins with severely **immature** inputs, whereas current ANNs mainly train on **instantaneous, high-fidelity** inputs.  
-* We model developmental trajectories of **visual acuity**, **contrast sensitivity**, and **chromatic sensitivity** from birth to 25 years.  
-* A differentiable pipeline dynamically applies these sensory maturation *on-the-fly* during training.  
-* Guiding AI vision through this **Developmental Visual Diet** produces models that better align with hallmark features of human visual robustness:  
-  1) Near-human-level **shape bias**  
-  2) Enhanced **robustness to corruptions**  
-  3) Improved **resilience to adversarial attacks**  
-  4) **Abstract shape recognition** beyond state-of-the-art vision-language models (e.g., ChatGPT-4o, Gemini 2.0 Flash, LLaMA-4-Scout)
+Standard ANNs are fed "adult" high-fidelity data from day one. In contrast, human infants learn from a highly constrained sensory diet. DVD models this trajectory through three core lenses:
 
-### 📈 Developmental visual trajectories  
+- **Acuity:** Spatial resolution that sharpens over time.
+- **Contrast:** Sensitivity to light/dark differences that expands across frequencies.
+- **Color:** Chromatic saturation that gradually matures.
+
+The **Scale-Free** version reformulates these transformations relative to image geometry and Nyquist limits, ensuring consistent behavior across different resolutions and viewing conditions.
+
+### 📈 Developmental Trajectories
 
 ![Age-dependent visual development curves](./assets/DVD_trajectories.png)
 
 ---
 
-## 2 Installation
-Typical install time on a standard desktop computer: ~1–3 minutes.
+## 🚀 Quick Start
+
+### Installation
+
+Setup typically takes 1–3 minutes on a standard machine.
 
 ```bash
 git clone https://github.com/KietzmannLab/DVD.git
 cd DVD
 pip install -e .
-python - <<'PY'
-import dvd, torch
-print("DVD version:", dvd.__version__, "| CUDA =", torch.cuda.is_available())
-PY
 ```
 
-## 3 Quick demo - aging visual experience
-
-Typical running time: ~1 minute on a single H100 GPU.
+### Minimal Usage
 
 ```python
-from pathlib import Path
-from typing import List
-import matplotlib.pyplot as plt
-import numpy as np
-from PIL import Image
 import torch
-from dvd.dvd.development import DVDTransformer, DVDConfig # DVD Data Transformer (main API)
+from dvd_scale_free.dvd_scale_free.development import DVDTransformer, DVDConfig
 
-# ------------------------------------------------------------
-# Configuration
-# ------------------------------------------------------------
-AGES: List[int] = [1, 4, 16, 64, 256]   # ages in months
-IMG_SIZE: int = 256                     # resize target (px)
-CFG = DVDConfig() 
-# Note: If your input images are not normalized to [0, 1], consider set 'by_percentile=True' in DVDConfig() to percentile-based thresholding, which adapts to the image’s actual intensity distribution.
+# 1. Initialize
+config = DVDConfig(image_size=224)
+transformer = DVDTransformer(config)
 
-# Input / output paths
-ASSETS_DIR = Path("assets/example_stimuli")
-IMAGE_PATHS = [
-    ASSETS_DIR / "example_1.jpeg",
-    ASSETS_DIR / "example_2.jpeg",
-]
-OUT_DIR = Path("results/dvd_demo_output")
-OUT_PATH = OUT_DIR / "dvd_demo_output.pdf"
+# 2. Transform (Simulate a 1-month-old infant's vision)
+x = torch.rand(1, 3, 224, 224)
+y = transformer(x, months=1)
 
-# Helper: load an image as [1, 3, H, W] float tensor in [0, 1]
-def load_tensor(fp: Path) -> torch.Tensor:
-    img = Image.open(fp).convert("RGB")
-    img.thumbnail((IMG_SIZE, IMG_SIZE), Image.LANCZOS)
-    arr = np.asarray(img).transpose(2, 0, 1) / 255.0
-    return torch.from_numpy(arr).unsqueeze(0).float()
-
-# Main: build demo
-def make_demo(paths: List[Path], outfile: Path) -> None:
-    dvdt = DVDTransformer(CFG)
-    tensors = [load_tensor(p) for p in paths]
-
-    rows, cols = len(tensors), len(AGES)
-    fig, ax = plt.subplots(rows, cols, figsize=(3 * cols, 3 * rows))
-
-    for r, img_t in enumerate(tensors):
-        for c, age in enumerate(AGES):
-            out = dvdt(img_t.clone(), months=age)              # DVD data transformation
-            vis = out.squeeze(0).permute(1, 2, 0).numpy().clip(0, 1)
-            ax[r, c].imshow(vis)
-            ax[r, c].axis("off")
-            if r == 0:
-                ax[r, c].set_title(f"{age} mo", fontsize=12)
-
-    fig.tight_layout()
-    outfile.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(outfile, dpi=300)
-    print(f"Saved {outfile.resolve()}")
-
-
-make_demo(IMAGE_PATHS, OUT_PATH)
-```
-## 4 Datasets
-
-This project makes use of several datasets:
-
-| Dataset   | Description                                                               | Link |
-|-----------|---------------------------------------------------------------------------|------|
-| **Ecoset** | A natural image dataset introduced in Mehrer et al., 2021                 | [Ecoset Website](https://www.kietzmannlab.org/ecoset/) |
-| **ImageNet** | Our models were also trained on the initial release of ImageNet         | [ImageNet Website](https://www.image-net.org/) |
-
-## 5 Training with DVD | Example
-
-```bash
-python scripts/main.py /share/klab/datasets --arch resnet50 --epochs 150 --dataset-name ecoset_square256 --class-weights-json-path '/share/klab/datasets/optimized_datasets/lookup_ecoset_json.json' --batch-size-per-gpu 512 --image-size 256 --warmup-epochs 0 --development_strategy dvd --months_per_epoch 2 --contrast_amplitude_beta 1e-4 --contrast_amplitude_lambda 150 --seed 1
+print(f"Output shape: {y.shape}")
 ```
 
-| Flag                     | Purpose                                                                 |
-|--------------------------|-------------------------------------------------------------------------|
-| `--development_strategy` | `dvd` (full curriculum) or `adult` (control).                           |
-| `--months_per_epoch`     | Virtual ageing per epoch (smaller = finer). Example: DVD-P = 4, DVD-B = 2, DVD-S = 1 |
-| `--time_order`           | `chronological` or `fully_random`.                                      |
-| `--apply_*`              | Toggle acuity / colour / contrast sensitivities.                        |
-| `--contrast_amplitude_*` | Control the reference amplitude threshold in FFT.                       |
+---
 
-## 6 Core API
+## 🛠️ The Pipeline
+
+DVD applies a three-stage differentiable transformation:
+
+1. **Acuity:** Gaussian or frequency-domain filtering to limit spatial detail.
+2. **Contrast:** Frequency-dependent filtering (Barten-style) to control information density.
+3. **Color:** Progressive desaturation and restoration of chromatic channels.
+
+### Core Hyperparameters
+
+While highly configurable, the curriculum is primarily driven by two main "knobs":
+
+| Hyperparameter | Description |
+| :--- | :--- |
+| `months_per_epoch` | Determines the speed of maturation. |
+| `contrast_progress_logspan_start` | Sets the severity of degradation at the start of training. |
+
+---
+
+## 📊 Training Example
+
+Integrate DVD into your training loop by mapping training steps to "virtual months":
 
 ```python
-from dvd.dvd.development import DVDTransformer, DVDConfig, generate_age_months_curve
+from dvd_scale_free.dvd_scale_free.development import DVDTransformer, DVDConfig, generate_age_months_curve
 
-# Initialize transformer and generate age mapping curve
-dvdt = DVDTransformer(DVDConfig())
+# Setup curve: 150 epochs, 2 virtual months per epoch
 age_curve = generate_age_months_curve(
-    epochs=args.epochs,
-    steps_per_epoch=len(train_loader),
-    months_per_epoch=args.months_per_epoch,
+    total_epochs=150,
+    len_train_loader=len(train_loader),
+    months_per_epoch=2
 )
 
-# Map current batch index to virtual age in months
-step_idx = (epoch * len(train_loader)) + i
-age_months = age_curve[step_idx]
+# Inside training loop:
+for i, (images, targets) in enumerate(train_loader):
+    step_idx = (epoch * len(train_loader)) + i
+    current_age = age_curve[step_idx]
 
-# Apply age-based visual transformations
-images_aged = dvdt(img_t.clone(), months=age, curriculum=age_curve)      
+    # Age the batch
+    images_aged = transformer(images.cuda(), months=current_age)
+
+    # Standard forward/backward pass...
 ```
 
-## 7 Citation
+---
+
+## 🧪 Experiments & CLI
+
+Run a full training session on **Ecoset** or **ImageNet** using the provided scripts:
 
 ```bash
+python scripts/main.py /path/to/datasets \
+  --arch resnet50 \
+  --dataset-name ecoset_square256 \
+  --development_strategy dvd \
+  --months_per_epoch 2 \
+  --contrast_progress_logspan_start 5e-3 \
+  --batch-size-per-gpu 512
+```
+
+### Key CLI Flags
+
+- `--development_strategy`: Use `dvd` for the curriculum or `adult` for standard training.
+- `--time_order`: `chronological` (normal aging) or `randomized` (shuffled ages).
+- `--blur_mode`: Choose between `gaussian` or `frequency-domain` acuity.
+
+---
+
+## 📚 Datasets
+
+DVD has been validated on:
+
+- **Ecoset:** A more ecologically valid natural image dataset ([Mehrer et al., 2021](https://www.pnas.org/doi/10.1073/pnas.2011417118)).
+- **ImageNet:** The standard benchmark for visual recognition.
+
+---
+
+## ✍️ Citation
+
+If you use DVD in your research, please cite our work:
+
+```bibtex
 @article{lu2025dvd,
   title   = {Adopting a human developmental visual diet yields robust, shape-based AI vision},
-  author  = {Zejin Lu, Sushrut Thorat, Radoslaw M. Cichy, Tim C. Kietzmann},
+  author  = {Lu, Zejin and Thorat, Sushrut and Cichy, Radoslaw M. and Kietzmann, Tim C.},
   journal = {arXiv preprint arXiv:2507.03168},
   year    = {2025},
   doi     = {10.48550/arXiv.2507.03168},
