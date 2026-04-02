@@ -70,8 +70,8 @@ While highly configurable, the curriculum is primarily governed by two key "knob
 
 | Hyperparameter | Description |
 | :--- | :--- |
-| `months_per_epoch` | Controls the rate of visual maturation over training. |
-| `contrast_progress_logspan_start` | Sets the initial mapping from contrast sensitivity to contrast amplitude in the frequency domain. |
+| `months_per_epoch` | Maps training epochs to developmental time (in months), controlling the rate of visual maturation. |
+| `contrast_progress_logspan_start` | Sets the initial mapping from contrast sensitivity to contrast amplitude in the frequency domain. Lower values yield higher amplitudes mapping and thus lower initial visual fidelity. |
 
 ---
 
@@ -104,16 +104,23 @@ for i, (images, targets) in enumerate(train_loader):
 
 ## 🧪 Experiments & CLI
 
-Run a full training session on **Ecoset** or **ImageNet** using the provided scripts:
+Run a full training session on **Ecoset** or **ImageNet** using the provided training script:
 
 ```bash
-python scripts/main.py /path/to/datasets \
+python scripts/main.py /share/klab/datasets \
   --arch resnet50 \
   --dataset-name ecoset_square256 \
+  --class-weights-json-path /share/klab/datasets/optimized_datasets/lookup_ecoset_json.json \
   --development_strategy dvd \
+  --time-order chronological \
   --months_per_epoch 2 \
-  --contrast_progress_logspan_start 5e-3 \
-  --batch-size-per-gpu 512
+  --contrast_progress_logspan_start 0.005 \
+  --epochs 150 \
+  --image-size 256 \
+  --batch-size-per-gpu 512 \
+  --lr 1e-4 \
+  --label-smoothing 0 \
+  --seed 1
 ```
 
 ### Key CLI Flags
