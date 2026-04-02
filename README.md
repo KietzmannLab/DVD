@@ -110,12 +110,7 @@ This project makes use of several datasets:
 ## 5 Training with DVD | Example
 
 ```bash
-python scripts/main.py \
-  --arch resnet50 --epochs 150 \
-  --dataset-name imagenet --data-root /share/klab/datasets \
-  --batch-size-per-gpu 512 --image-size 256 \
-  --development_strategy dvd --months_per_epoch 2 \
-  --contrast_amplitude_beta 1e-4 --contrast_amplitude_lambda 150
+python scripts/main.py /share/klab/datasets --arch resnet50 --epochs 150 --dataset-name ecoset_square256 --class-weights-json-path '/share/klab/datasets/optimized_datasets/lookup_ecoset_json.json' --batch-size-per-gpu 512 --image-size 256 --warmup-epochs 0 --development_strategy dvd --months_per_epoch 2 --contrast_amplitude_beta 1e-4 --contrast_amplitude_lambda 150 --seed 1
 ```
 
 | Flag                     | Purpose                                                                 |
