@@ -66,12 +66,12 @@ DVD applies a three-stage differentiable transformation:
 
 ### Core Hyperparameters
 
-While highly configurable, the curriculum is primarily driven by two main "knobs":
+While highly configurable, the curriculum is primarily governed by two key "knobs":
 
 | Hyperparameter | Description |
 | :--- | :--- |
-| `months_per_epoch` | Determines the speed of maturation. |
-| `contrast_progress_logspan_start` | Sets the severity of degradation at the start of training. |
+| `months_per_epoch` | Controls the rate of visual maturation over training. |
+| `contrast_progress_logspan_start` | Sets the initial mapping from contrast sensitivity to contrast amplitude in the frequency domain. |
 
 ---
 
