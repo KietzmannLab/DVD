@@ -3,26 +3,11 @@
 """
 Developmental Visual Diet (DVD) simulator | Scale-free version : three-stage pipeline
 
-Supports inputs with C in {1, 3, 4}:
-  - C=1  : single-channel (depth map / grayscale). Color stage is a no-op.
-  - C=3  : RGB. All stages apply to RGB.
-  - C=4  : RGBD. Color stage applies ONLY to first 3 (RGB); blur/acuity + contrast apply to ALL 4.
-
 Accepted shapes:
   - [C,H,W] or [B,C,H,W]  (C ∈ {1,3,4})
   - or a list of those tensors
 
 Expected value range: float in [0,1].
-
-Design notes
-------------
-This file preserves the original behavior while speeding up the implementation.
-
-Main speed optimizations:
-- vectorized FFT filtering across ALL channels
-- fewer Python loops in contrast / acuity stages
-- reduced repeated tensor allocations
-- more aggressive caching of helper tensors / constants
 """
 
 # ============================================================
