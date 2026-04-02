@@ -133,10 +133,12 @@ python scripts/main.py /share/klab/datasets \
 
 ## 📚 Datasets
 
-DVD has been validated on:
+This project makes use of several datasets:
 
-- **Ecoset:** A more ecologically valid natural image dataset ([Mehrer et al., 2021](https://www.pnas.org/doi/10.1073/pnas.2011417118)).
-- **ImageNet:** The standard benchmark for visual recognition.
+| Dataset   | Description                                                               | Link |
+|-----------|---------------------------------------------------------------------------|------|
+| **Ecoset** | A natural image dataset introduced in Mehrer et al., 2021                 | [Ecoset Website](https://www.kietzmannlab.org/ecoset/) |
+| **ImageNet** | Our models were also trained on the initial release of ImageNet         | [ImageNet Website](https://www.image-net.org/) |
 
 ---
 
