@@ -14,7 +14,7 @@ DVD is a **plug-and-play training curriculum** that progressively "ages" input i
 Standard ANNs are fed "adult" high-fidelity data from day one. In contrast, human infants learn from a highly constrained sensory diet. DVD models this trajectory through three core lenses:
 
 - **Acuity:** Spatial resolution that sharpens over time.
-- **Contrast:** Sensitivity to light/dark differences that expands across frequencies.
+- **Contrast:** Sensitivity to brightness differences that expands across frequencies.
 - **Color:** Chromatic saturation that gradually matures.
 
 The **Scale-Free** version reformulates these transformations relative to image geometry and Nyquist limits, ensuring consistent behavior across different resolutions and viewing conditions.
@@ -61,7 +61,7 @@ print(f"Output shape: {y.shape}")
 DVD applies a three-stage differentiable transformation:
 
 1. **Acuity:** Gaussian or frequency-domain filtering to limit spatial detail.
-2. **Contrast:** Frequency-dependent filtering (Barten-style) to control information density.
+2. **Contrast:** Frequency-dependent filtering (w/o Barten-style) to control information density.
 3. **Color:** Progressive desaturation and restoration of chromatic channels.
 
 ### Core Hyperparameters
