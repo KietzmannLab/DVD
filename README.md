@@ -54,7 +54,7 @@ print(f"Output shape: {y.shape}")
 
 ### Visualisation Demo Across Developmental Months
 To visualise how example RGB images change across developmental ages, run:
-``bash
+```bash
 python tests/dvd_images_demo.py
 ```
 This generates a grid of transformed images across multiple months and is useful for quickly inspecting the qualitative effect of DVD.
