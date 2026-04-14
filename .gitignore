@@ -21,13 +21,10 @@ save_dir_shared/*
 ./docs/*
 ./results
 ./results/*
-./tests
-./tests/*
 data/
 data/*
 docs/
 results/
-tests/
 logs/
 logs/*
 *__pycache__*
