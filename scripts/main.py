@@ -67,7 +67,7 @@ parser.add_argument('--image-size', type=int, default=256)
 
 # Setting for development strategy
 parser.add_argument('--development_strategy', default='adult', type=str, help='development strategy (adult | dvd)')
-parser.add_argument("--time-order", default="chronological", type=str, choices=["chronological", "mid_phase", "random", "fully_random"])
+parser.add_argument("--time_order", default="chronological", type=str, choices=["chronological", "mid_phase", "random", "fully_random"])
 parser.add_argument("--months_per_epoch", default=2, type=float, help="number of months per epoch")
 parser.add_argument("--contrast_amplitude_beta", default=1e-4, type=float)
 parser.add_argument("--contrast_amplitude_lambda", default=150, type=float)

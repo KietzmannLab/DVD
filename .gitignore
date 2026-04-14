@@ -41,6 +41,7 @@ checkpoints/*
 
 # Ignore everything in scripts/
 scripts/*
+tests/dvd_movie_demo.py
 # But keep main.py
 !scripts/main.py
 !scripts/eval.py
