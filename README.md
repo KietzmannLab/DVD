@@ -118,8 +118,8 @@ We provide several trained checkpoints for direct use.
 
 | Training data | Model variants | Notes | Link |
 |---|---|---|---|
-| **Ecoset** | Baseline, DVD-P, DVD-B, DVD-S | Default models trained on ecoset. We recommend **DVD-B** as the default starting point. | [OSF checkpoint files](https://osf.io/8s2mc/files/osfstorage) |
-| **Ecoset** | Scale-free DVD-B | This version shows similar shape bias and higher accuracy than the standard DVD-B, depending on the exact setup/version. | [OSF scale-free checkpoint](https://osf.io/ypwt5/overview) |
+| **Ecoset** | Baseline, DVD-P, DVD-B, DVD-S | Default models trained on Ecoset. We recommend **DVD-B** as the default starting point. | [OSF checkpoint files](https://osf.io/7mkuq/overview) |
+| **Ecoset** | Scale-free DVD-B | This version shows similar shape bias and higher accuracy than the DVD-B Paper Version, see the code in the [`scale_free` branch](https://github.com/KietzmannLab/DVD/tree/scale_free) | [OSF scale-free checkpoint](https://osf.io/ypwt5/overview) |
 | **ImageNet-1K** | Baseline, DVD-P, DVD-B, DVD-S | Models trained on ImageNet-1K (without hyperparameter sweeping) | [OSF ImageNet-1K checkpoints](https://osf.io/ejbsc/overview) |
 
 > [!IMPORTANT]
