@@ -23,7 +23,7 @@ A plug-and-play training curriculum that progressively “ages” each image, mi
 
 > [!NOTE]
 > For new projects, we recommend starting with the **scale-free version** in the [`scale_free` branch](https://github.com/KietzmannLab/DVD/tree/scale_free).  
-> It reformulates the DVD transformations relative to image geometry and Nyquist limits, making behaviour more consistent across resolutions and viewing conditions.  
+> It reformulates the DVD transformations, making behaviour more consistent across resolutions and different conditions.  
 > The current branch remains useful for reproducing the original setup and results reported in the paper.
 ---
 
