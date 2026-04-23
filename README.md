@@ -21,6 +21,10 @@ A plug-and-play training curriculum that progressively “ages” each image, mi
 
 ![Age-dependent visual development curves](./assets/DVD_trajectories.png)
 
+> [!NOTE]
+> For new projects, we recommend starting with the **scale-free version** in the [`scale_free` branch](https://github.com/KietzmannLab/DVD/tree/scale_free).  
+> It reformulates the DVD transformations relative to image geometry and Nyquist limits, making behaviour more consistent across resolutions and viewing conditions.  
+> The current branch remains useful for reproducing the original setup and results reported in the paper.
 ---
 
 ## 2 Installation
