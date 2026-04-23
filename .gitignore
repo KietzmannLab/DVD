@@ -43,6 +43,7 @@ checkpoints/*
 scripts/*
 # But keep main.py
 !scripts/main.py
-!scripts/eval.py
+!scripts/main.py
+!scripts/dvd_demo.py
 # Ignore the dvd/analysis directory 
 dvd/analysis/
