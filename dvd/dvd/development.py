@@ -26,8 +26,8 @@ class DVDConfig:
     apply_blur: int = 1
     apply_color: int = 1
     apply_contrast: int = 1
-    contrast_amplitude_beta: float = 0.2 
-    contrast_amplitude_lam: float = 150.0,  
+    contrast_amplitude_beta: float = 1e-4 
+    contrast_amplitude_lam: float = 150.0
     apply_threshold_color: bool = False
     image_size: int = 224
     fully_random: bool = False
