@@ -159,12 +159,11 @@ This project makes use of several datasets:
 If you use DVD in your research, please cite our work:
 
 ```bibtex
-@article{lu2025dvd,
-  title   = {Adopting a human developmental visual diet yields robust, shape-based AI vision},
-  author  = {Lu, Zejin and Thorat, Sushrut and Cichy, Radoslaw M. and Kietzmann, Tim C.},
-  journal = {arXiv preprint arXiv:2507.03168},
-  year    = {2025},
-  doi     = {10.48550/arXiv.2507.03168},
-  url     = {https://arxiv.org/abs/2507.03168}
+@article{lu2026developmental,
+  title={Adopting a human developmental visual diet yields robust and shape-based AI vision},
+  author={Lu, Zejin and Thorat, Siddhesh and Cichy, Radoslaw M. and Kietzmann, Tim C.},
+  journal={Nature Machine Intelligence},
+  pages={1-14},
+  year={2026}
 }
 ```
