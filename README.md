@@ -161,7 +161,7 @@ If you use DVD in your research, please cite our work:
 ```bibtex
 @article{lu2026developmental,
   title={Adopting a human developmental visual diet yields robust and shape-based AI vision},
-  author={Lu, Zejin and Thorat, Siddhesh and Cichy, Radoslaw M. and Kietzmann, Tim C.},
+  author={Lu, Zejin and Thorat, Sushrut and Cichy, Radoslaw M. and Kietzmann, Tim C.},
   journal={Nature Machine Intelligence},
   pages={1-14},
   year={2026}
