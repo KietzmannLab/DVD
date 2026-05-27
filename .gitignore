@@ -45,5 +45,6 @@ scripts/*
 !scripts/main.py
 !scripts/main.py
 !scripts/dvd_demo.py
+!scripts/eval_new_images.py
 # Ignore the dvd/analysis directory 
 dvd/analysis/
