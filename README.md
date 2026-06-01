@@ -180,7 +180,7 @@ images_aged = dvdt(img_t.clone(), months=age, curriculum=age_curve)
   author  = {Lu, Zejin and Thorat, Sushrut and Cichy, Radoslaw M. and Kietzmann, Tim C.},
   journal = {Nature Machine Intelligence},
   volume  = {8},
-  pages   = {735--748},
+  pages   = {735-748},
   year    = {2026},
   doi     = {10.1038/s42256-026-01228-6},
   url     = {https://doi.org/10.1038/s42256-026-01228-6}
