@@ -111,7 +111,23 @@ This project makes use of several datasets:
 | **Ecoset** | A natural image dataset introduced in Mehrer et al., 2021                 | [Ecoset Website](https://www.kietzmannlab.org/ecoset/) |
 | **ImageNet** | Our models were also trained on the initial release of ImageNet         | [ImageNet Website](https://www.image-net.org/) |
 
-## 5 Inference on new images
+
+## 5. Trained Checkpoints
+
+We provide several trained checkpoints for direct use.
+
+| Training data | Model variants | Notes | Link |
+|---|---|---|---|
+| **Ecoset** | Baseline, DVD-P, DVD-B, DVD-S | Default models trained on Ecoset. We recommend **DVD-B** as the default starting point. | [OSF checkpoint files](https://osf.io/8s2mc/files/osfstorage) |
+| **Ecoset** | Scale-free DVD-B | Scale-free DVD-B shows similar shape bias and higher accuracy than the standard DVD-B in some setups. | [OSF scale-free checkpoint](https://osf.io/ypwt5/overview) |
+| **ImageNet-1K** | Baseline, DVD-P, DVD-B, DVD-S | Models trained on ImageNet-1K without extensive hyperparameter sweeping. | [OSF ImageNet-1K checkpoints](https://osf.io/ejbsc/overview) |
+
+> [!IMPORTANT]
+> All checkpoints released here were trained with the **same data augmentation pipeline**, making comparisons within this repository straightforward.
+>
+> For other publicly available models, training-time data augmentations may differ substantially. Therefore, results are **not necessarily directly comparable**.
+
+## 6 Inference on new images
 
 For a minimal example of loading a released ResNet50 checkpoint and running inference on new images, see `scripts/eval_new_images.py`. The script uses a standard torchvision ResNet50, adapts the final classifier to the checkpoint, handles common checkpoint key prefixes, and prints top-k predictions with ImageNet or Ecoset class names when available. Inputs are resized to 256×256 and converted to RGB tensors in `[0, 1]`; no ImageNet mean/std normalization is applied.
 
@@ -121,7 +137,7 @@ python scripts/eval_new_images.py \
   --images assets/example_stimuli/*.jpeg
 ```
 
-## 6 Training with DVD | Example
+## 7 Training with DVD | Example
 
 ```bash
 python scripts/main.py /share/klab/datasets --arch resnet50 --epochs 150 --dataset-name ecoset_square256 --class-weights-json-path '/share/klab/datasets/optimized_datasets/lookup_ecoset_json.json' --batch-size-per-gpu 512 --image-size 256 --warmup-epochs 0 --development_strategy dvd --months_per_epoch 2 --contrast_amplitude_beta 1e-4 --contrast_amplitude_lambda 150 --seed 1
@@ -135,7 +151,7 @@ python scripts/main.py /share/klab/datasets --arch resnet50 --epochs 150 --datas
 | `--apply_*`              | Toggle acuity / colour / contrast sensitivities.                        |
 | `--contrast_amplitude_*` | Control the reference amplitude threshold in FFT.                       |
 
-## 7 Core API
+## 8 Core API
 
 ```python
 from dvd.dvd.development import DVDTransformer, DVDConfig, generate_age_months_curve
@@ -156,7 +172,7 @@ age_months = age_curve[step_idx]
 images_aged = dvdt(img_t.clone(), months=age, curriculum=age_curve)      
 ```
 
-## 8 Citation
+## 9 Citation
 
 ```bash
 @article{lu2025dvd,
