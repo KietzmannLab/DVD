@@ -38,6 +38,7 @@ class DVDCommandTests(unittest.TestCase):
         protocol = json.loads(latest.stdout)
         self.assertEqual(protocol["method"], "endpoint-linear")
         self.assertEqual(protocol["config"]["speed"], 1)
+        self.assertTrue(protocol["config"]["apply_contrast"])
         self.assertEqual(protocol["config"]["speed_components"], ["acuity", "contrast", "color"])
         self.assertIsNone(protocol["config"]["adult_anchor_cpd"])
         self.assertFalse(protocol["config"]["unfiltered_at_300"])

@@ -26,7 +26,10 @@ from dvd_scale_free.dvd_scale_free.inverse_endpoint_linear import (
 )
 from dvd_scale_free.dvd_scale_free.rrc import rrc_from_args
 
-parser = argparse.ArgumentParser(description="Model Training")
+recipe_option = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+recipe_option.add_argument("--training-recipe", choices=("general", "p004-paper"), default="general",
+                           help="opt in to the P004 ImageNet/RN50 paper runner")
+parser = argparse.ArgumentParser(description="Model Training", parents=[recipe_option])
 parser.add_argument("data", metavar="DIR", nargs="?", help="path to dataset")
 parser.add_argument("--dataset-name", default="texture2shape_miniecoset", type=str, help="dataset name")
 parser.add_argument("--imagenet-path", help="ImageNet ImageFolder root containing train/ and val/")
@@ -66,7 +69,8 @@ parser.add_argument("--months_per_epoch", default=2, type=float, help="number of
 parser.add_argument("--apply_blur", type=int, choices=[0, 1], default=1, help="apply age-dependent acuity")
 parser.add_argument("--apply_color", type=int, choices=[0, 1],
                     help="age-dependent color (default: on for forward, off for flipped modes)")
-parser.add_argument("--apply_contrast", type=int, choices=[0, 1], default=1, help="apply age-dependent contrast")
+parser.add_argument("--apply_contrast", type=int, choices=[0, 1], default=1,
+                    help="apply age-dependent contrast when DVD is selected (default: on)")
 parser.add_argument("--contrast_fov_deg", "--dvd-fov-deg", type=float, default=15.0)
 parser.add_argument("--contrast_soft_tau_log10", "--dvd-sigmoid-width-log10", type=float, default=0.10)
 
@@ -134,6 +138,16 @@ parser.add_argument("--rrc-scale", type=float, nargs=2, metavar=("MIN", "MAX"), 
 parser.add_argument("--rrc-ratio", type=float, nargs=2, metavar=("MIN", "MAX"), help="crop aspect ratio (default: .75 1.3333)")
 parser.add_argument("--crop-min", default=1.0, type=float, help="legacy alias for RRC minimum area; requires --rrc")
 parser.add_argument("--best-acc1", default=0.0, type=float)
+parser.add_argument("--output-dir", help="explicit run directory for --training-recipe p004-paper")
+
+
+def parse_args(argv=None):
+    chosen, _ = recipe_option.parse_known_args(argv)
+    if chosen.training_recipe == "p004-paper":
+        from dvd_scale_free.models.paper_runner import RECIPE_DEFAULTS
+
+        return parser.parse_args(argv, namespace=argparse.Namespace(**RECIPE_DEFAULTS))
+    return parser.parse_args(argv)
 
 def setup_logging_and_wandb(args):
     import wandb
@@ -505,7 +519,7 @@ def train(
 
 
 def main():
-    args = parser.parse_args()
+    args = parse_args()
     flipped = args.invert_frequency or args.invert_amplitude
     if args.apply_color is None:
         args.apply_color = int(not flipped)
@@ -514,13 +528,27 @@ def main():
     if args.rrc and args.dataset_name == "rgbd_texture2shape_miniecoset":
         parser.error("RRC in this trainer supports the RGB pipeline, not the paired RGB-D pipeline")
     try:
+        if args.training_recipe == "p004-paper":
+            from dvd_scale_free.models import paper_runner
+
+            paper_runner.check_options(args)
         dvdt = build_dvd_transformer(args)
         args.dvd_protocol = describe_dvd(args, dvdt)
+        if args.training_recipe == "p004-paper":
+            args.dvd_protocol["training_recipe"] = paper_runner.describe(args, dvdt)
+        elif args.output_dir is not None:
+            raise ValueError("--output-dir is for --training-recipe p004-paper")
     except ValueError as exc:
         parser.error(str(exc))
     if args.describe_dvd:
         print(json.dumps(args.dvd_protocol, indent=2))
         return
+    if args.training_recipe == "p004-paper":
+        if args.evaluate and not args.resume:
+            parser.error("Paper evaluation requires --resume with a trusted checkpoint")
+        if not args.evaluate and not args.output_dir:
+            parser.error("Paper training requires --output-dir")
+        return paper_runner.run(args, dvdt, build_age_months_curve)
     if args.data is None:
         parser.error("data is required for training or evaluation")
 

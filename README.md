@@ -129,14 +129,40 @@ WANDB_MODE=offline torchrun --standalone --nproc-per-node=2 -m scripts.main /dat
   --image-size 256 --batch-size-per-gpu 512 --lr 1e-4 --label-smoothing 0 --seed 0
 ```
 
+- Endpoint Linear contrast is **on** by default when DVD is selected. In the native P004 launcher, `--apply_contrast 0` disabled only the superseded paper contrast filter. Here it disables Endpoint Linear contrast itself; do not copy that flag.
 - Use `--dvd-method legacy` for the original scale-free CLI. For example, `--cs_logspan_start 0.005` selects the legacy remapping parameter. The legacy CLI defaults to enabling the optional Barten CSF; add `--contrast_use_barten_csf 0` to match the legacy Python API defaults.
 - To retime only contrast, use `--endpoint-speed 0.5 --endpoint-speed-components contrast`. To retime multiple curves, list them after the flag (e.g., `acuity contrast`).
 - The new training transform uses chunked, batched real FFTs for square float32 RGB or single-channel batches at least 224 px with default geometry and both spatial stages enabled. Other settings or diagnostic requests use the reference path, which can be slower. `--endpoint-backend batched` checks that the training input can use the accelerated path; `--endpoint-chunk-size` controls its temporary memory.
 - Validation uses adult (unfiltered) inputs. Endpoint Linear checkpoints record the filter, schedule, and selected speed components; resume with matching options. The independent acuity clock is recorded when active, so a forward checkpoint trained with the earlier Hill-retimed acuity must be resumed with its original revision. For older contrast-only checkpoints, use `--resume` with the matching contrast-only settings. Use a separate working directory for independent runs.
 
+### P004 Paper Runner
+
+The opt-in recipe ports the P004 runner used for the forward Endpoint Linear V=1 RN50 experiment. It does not change the general or legacy trainer. It requires a full ImageNet-1K ImageFolder tree and two CUDA GPUs on one node:
+
+```sh
+python -m scripts.main --training-recipe p004-paper --describe-dvd
+
+torchrun --standalone --nproc-per-node=2 -m scripts.main \
+  --training-recipe p004-paper \
+  --imagenet-path /path/to/imagenet --output-dir runs/p004-paper-v1
+```
+
+| Component | P004 paper recipe |
+| :--- | :--- |
+| Inputs and augmentation | Ordered JPEGs and common labels from ImageFolder. PIL short-edge resize, then full-frame bilinear 256 px resize (`align_corners=True`, no tensor antialias). Paper Kornia operators draw parameters per image in GPU batches, before FP32 Endpoint Linear. No RRC or Recipe B. |
+| Schedule and optimizer | 150 epochs, 1,251 steps per epoch, 2 months per epoch, 512 images per rank, seed 0 by default. Class-weighted cross-entropy, fused Adam at `1e-4` with `weight_decay=1e-6`, channels-last layout, FP16 model autocast, GradScaler, and the full-batch SyncBN path. |
+| Validation and best | Eager inference on 50,000 unfiltered adult images, without augmentation. Both ranks reduce weighted loss and hit counts; best is chosen by whole-set top-1. |
+| Inputs and restart verification | Check ImageNet split sizes and class mapping and compare ordered ID hashes and sampled JPEG hashes on both ranks. Save the manifest, library versions, age schedule, optimizer/scaler, and each rank's separate RNG state. Last, best, and periodic checkpoints are written atomically. |
+
+On the lab cluster, omitting the data path reads `/share/klab/datasets/cached_datasets/imagenet_p004` directly. No dataset cache is copied to RAM or local scratch. The paper loader uses bounded batch queues (24 train and 8 validation workers per rank by default); `/dev/shm` is needed for the queues, not for the dataset itself. The runner checks for 80 GiB available RAM and 24 GiB free shared-memory space when the Linux counters are available. For Slurm, the reference allocation is `--mem=105G --cpus-per-task=60` for both ranks together. A known Slurm RAM allocation below 80 GiB is rejected even if the node has ample free RAM.
+
+Continue a new run with the same options and `--resume runs/p004-paper-v1/weights/checkpoint_last.pth`. For a trusted native `linear_v1` checkpoint, the runner checks the saved paper flags, age schedule, and optimizer; continuing training additionally requires both original rank RNG states. Use a new output directory for that continuation and retain the original best checkpoint. To replay ImageNet validation without training or writing checkpoints, use the paper recipe with `--evaluate --resume /path/to/checkpoint_best.pth` and the same ImageNet split.
+
+Use the same ImageNet bytes, PyTorch/CUDA, torchvision, Kornia, and Pillow versions, and comparable GPU topology for quantitative retraining comparisons. The original B200 protocol used the torch 2.7.1 / CUDA 12.8 stack. The data manifest hashes all ordered IDs and labels, but only spot-checks JPEG bytes. A new run is not a bitwise reproduction of the archived weights: GPU FFT/scatter arithmetic and the exact original resume history still matter. Replaying the paper metrics requires the archived checkpoint and evaluation inputs, not a fresh training run.
+
 ### Replaying an Existing Experiment
 
-This CLI selects the same V=1 **visual transform** as the P004 paper-augmentation run. It is **not** the same full training recipe. The original run also fixed ImageNet sample and class order, augmentation and resizing, optimizer and precision, distributed batch construction and random states, and checkpoint selection. It used GPU-batched paper augmentation and a specialized training and validation runtime. Matching V, age, and resolution alone does not reproduce that checkpoint, its validation accuracy, or its epoch time. Use the original checkpoint and evaluation preprocessing for exact analysis replay; use the original launcher and environment for a retraining comparison.
+The general CLI selects the same V=1 **visual transform** as P004 under the matching input geometry, but retains its separate trainer. Its CPU sample augmentations, Adam defaults and rank-local validation are not a replay of the P004 protocol. Use the paper runner above for a retraining comparison and the original checkpoint and evaluation preprocessing for exact analysis replay.
 
 For the matched shape/texture steering comparison, use the frozen best-validation RN50 checkpoints rather than retraining from the switches: standard e103, forward e148, full-color inverse e143, and full-color inverse with RRC e147. The inverse runs used the original packed, GPU-augmented pipeline. The matched RRC run used area `(0.08, 1.0)` and ratio `(0.75, 4/3)`, and neither inverse run used random grayscale. The reported scores were measured on unfiltered adult RGB (ImageNet at 256 px; cue conflict at 224 px).
 
@@ -145,6 +171,8 @@ For the matched shape/texture steering comparison, use the frozen best-validatio
 ```sh
 python -m unittest discover -s tests -v
 ```
+
+On a CUDA node with two GPUs, `PYTHONPATH=. python tests/paper_cuda_smoke.py /path/to/new-smoke-directory` exercises the paper runner on synthetic JPEGs, including optimization, distributed validation, checkpoint save, and a separate-process resume. It does not train the full ImageNet model.
 
 ## Datasets
 
