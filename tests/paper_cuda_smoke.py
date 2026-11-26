@@ -33,7 +33,7 @@ def small_model(args):
 
 
 def worker(root, *, resume):
-    argv = ["--training-recipe", "p004-paper", "--workers", "0", "--seed", "5",
+    argv = ["--training-recipe", "paper", "--workers", "0", "--seed", "5",
             "--imagenet-path", str(root / "fixture"), "--output-dir", str(root / "run"),
             "--save-checkpoint-every-epochs", "1"]
     if resume:

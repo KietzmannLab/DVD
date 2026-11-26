@@ -32,7 +32,7 @@ def cli(*args):
 
 
 def paper_args(*flags):
-    args = main.parse_args(["--training-recipe", "p004-paper", *flags])
+    args = main.parse_args(["--training-recipe", "paper", *flags])
     args.apply_color = args.grayscale_aug = 1
     dvd = main.build_dvd_transformer(args)
     args.dvd_protocol = main.describe_dvd(args, dvd)
@@ -92,7 +92,7 @@ class PaperRunnerTests(unittest.TestCase):
         torch.set_num_threads(2)
 
     def test_paper_cli_resolves_native_recipe_and_refuses_disabled_contrast(self):
-        args = ("--training-recipe", "p004-paper", "--describe-dvd")
+        args = ("--training-recipe", "paper", "--describe-dvd")
         result = cli(*args)
         self.assertEqual(result.returncode, 0, result.stderr)
         protocol = json.loads(result.stdout)
@@ -102,12 +102,16 @@ class PaperRunnerTests(unittest.TestCase):
         self.assertFalse(protocol["config"]["unfiltered_at_300"])
         self.assertEqual(protocol["epochs"], 150)
         recipe = protocol["training_recipe"]
+        self.assertEqual(recipe["name"], "paper")
         self.assertEqual(recipe["optimizer"], dict(name="adam", lr=1e-4, weight_decay=1e-6, fused=True))
         self.assertEqual(recipe["validation"], "unfiltered-eager-global-50000")
+        previous = cli("--training-recipe", "p004-paper", "--describe-dvd")
+        self.assertEqual(previous.returncode, 0, previous.stderr)
+        self.assertEqual(json.loads(previous.stdout), protocol)
         for bad in (("--apply_contrast", "0"), ("--rrc",), ("--epochs", "300"), ("--wd", "0")):
             result = cli(*args, *bad)
             self.assertEqual(result.returncode, 2)
-            self.assertIn("p004-paper requires", result.stderr)
+            self.assertIn("paper recipe requires", result.stderr)
 
     def test_paper_batch_prefix_and_random_draws(self):
         args = paper_args()
@@ -158,7 +162,7 @@ class PaperRunnerTests(unittest.TestCase):
                      age_months_curve=[0., 1.], rank_rng=[{}, {}], scaler={},
                      optimizer={"param_groups": [{"lr": 1e-4, "fused": True, "weight_decay": 1e-6}]})
         paper._check_checkpoint(state, args, {}, [0., 1.])
-        with self.assertRaisesRegex(ValueError, "native P004"):
+        with self.assertRaisesRegex(ValueError, "native paper"):
             paper._check_checkpoint({**state, "training_variant": "linear_v05"}, args, {}, [0., 1.])
         with self.assertRaisesRegex(ValueError, "age schedule"):
             paper._check_checkpoint(state, args, {}, [0., 2.])
@@ -166,6 +170,11 @@ class PaperRunnerTests(unittest.TestCase):
             paper._check_checkpoint({**state, "rank_rng": []}, args, {}, [0., 1.])
         prior_protocol = dict(args.dvd_protocol, method="endpoint-linear")
         paper._check_checkpoint({**state, "dvd_protocol": prior_protocol, "input_manifest": {}}, args, {}, [0., 1.])
+        prior_protocol["training_recipe"] = dict(prior_protocol["training_recipe"], name="p004-paper")
+        paper._check_checkpoint({**state, "dvd_protocol": prior_protocol, "input_manifest": {}}, args, {}, [0., 1.])
+        prior_protocol["training_recipe"]["world_size"] = 4
+        with self.assertRaisesRegex(ValueError, "recipe or ImageNet manifest differs"):
+            paper._check_checkpoint({**state, "dvd_protocol": prior_protocol, "input_manifest": {}}, args, {}, [0., 1.])
         with self.assertRaisesRegex(ValueError, "manifest differs"):
             paper._check_checkpoint({**state, "dvd_protocol": args.dvd_protocol}, args, {"train": "new"}, [0., 1.])
 

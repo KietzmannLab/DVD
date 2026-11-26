@@ -7,7 +7,7 @@
 
 ## Development-Oriented: Model Human Visual Development
 
-**Enable DVD with `--development-strategy dvd` and set `--months_per_epoch`.** Once you have chosen the number of training epochs, this is the only DVD parameter you need to adjust. The defaults follow the human fits (`V = 1`) in chronological order, with acuity, contrast, and color enabled on RGB inputs. Override the visual angles only to match a different viewing setup. Without DVD, the general trainer uses adult inputs with no developmental filtering.
+**Enable DVD with `--development-strategy dvd` and choose `--months_per_epoch`.** The defaults follow the human acuity, contrast, and color curves (`V = 1`) from birth onward. Leave the other settings alone unless you need to match a different viewing angle. Without DVD, training uses adult inputs.
 
 ### Install and Train
 
@@ -25,7 +25,7 @@ Choose a DVD schedule below to span birth to **25 years (300 months)**. The plan
 | DVD-S | 300 | 1 | 300 months (25 years) |
 | DVD-P | 75 | 4 | 300 months (25 years) |
 
-The first batch is at 0 months; the last batch is just before the planned boundary. To include training inputs at 300 months or beyond, keep the schedule's months per epoch and add epochs. For example, DVD-B first presents 300-month inputs at the start of epoch 151. At and beyond 300 months, the forward contrast filter stays at its adult maturation level; it does not switch off.
+Training starts at 0 months and stops just before the planned end age. To include 300-month inputs, add an epoch without changing the rate (epoch 151 for DVD-B). The forward contrast filter reaches its adult setting at 300 months and stays on.
 
 The example below uses the DVD-B schedule:
 
@@ -35,7 +35,7 @@ WANDB_MODE=offline torchrun --standalone --nproc-per-node=2 -m scripts.main /dat
   --development-strategy dvd --epochs 150 --months_per_epoch 2
 ```
 
-This is the general training command. To match the original RN50 training recipe, use the [P004 Paper Runner](#p004-paper-runner).
+To match the original ResNet-50 training setup, use [Paper Training](#paper-training).
 
 Inspect the resolved settings without loading data or allocating a GPU:
 
@@ -90,40 +90,25 @@ The automatic adult anchor is calibrated to 224 pixels over 15 degrees: `0.98 * 
 
 ### Training Notes
 
-- Contrast is **on** by default when DVD is selected. The native P004 launcher's `--apply_contrast 0` disabled a superseded filter; in this repository it disables DVD contrast. Do not copy that flag.
+- Contrast is **on** by default. Leave it on for human development: `--apply_contrast 0` disables DVD contrast here.
 - The trainer uses batched real FFTs for square float32 RGB or single-channel batches at least 224 px with default geometry and both spatial stages enabled. Other settings or diagnostic requests can use a slower reference implementation. `--dvd-backend batched` requires the accelerated path; `--dvd-chunk-size` controls its temporary memory.
 - Validation uses unfiltered adult inputs. Checkpoints record the filter and schedule; resume with matching settings. Use separate working directories for independent runs.
 
-### P004 Paper Runner
+### Paper Training
 
-The opt-in recipe ports the P004 runner used for the forward DVD V=1 RN50 experiment. It fixes the training schedule at 150 epochs and 2 months per epoch and requires a full ImageNet-1K ImageFolder tree and two CUDA GPUs on one node:
+Train ResNet-50 on ImageNet-1K with DVD-B timing (150 epochs, 2 months per epoch), the [paper augmentation](dvd_scale_free/datasets/paper_imagenet.py#L87), and no random resized crop. Use the full ImageNet-1K training and validation splits and two CUDA GPUs on one node.
 
 ```sh
-python -m scripts.main --training-recipe p004-paper --describe-dvd
-
 torchrun --standalone --nproc-per-node=2 -m scripts.main \
-  --training-recipe p004-paper \
-  --imagenet-path /path/to/imagenet --output-dir runs/p004-paper-v1
+  --training-recipe paper \
+  --imagenet-path /path/to/imagenet --output-dir runs/dvd-b-paper
 ```
 
-| Component | P004 paper recipe |
-| :--- | :--- |
-| Inputs and augmentation | Ordered JPEGs and common labels from ImageFolder. PIL short-edge resize, then full-frame bilinear 256 px resize (`align_corners=True`, no tensor antialias). Paper Kornia operators draw parameters per image in GPU batches, before FP32 DVD. No RRC or Recipe B. |
-| Schedule and optimizer | 150 epochs, 1,251 steps per epoch, 2 months per epoch, 512 images per rank, seed 0 by default. Class-weighted cross-entropy, fused Adam at `1e-4` with `weight_decay=1e-6`, channels-last layout, FP16 model autocast, GradScaler, and the full-batch SyncBN path. |
-| Validation and best | Eager inference on 50,000 unfiltered adult images, without augmentation. Both ranks reduce weighted loss and hit counts; best is chosen by whole-set top-1. |
-| Inputs and restart verification | Check ImageNet split sizes and class mapping and compare ordered ID hashes and sampled JPEG hashes on both ranks. Save the manifest, library versions, age schedule, optimizer/scaler, and each rank's separate RNG state. Last, best, and periodic checkpoints are written atomically. |
-
-On the lab cluster, omitting the data path reads `/share/klab/datasets/cached_datasets/imagenet_p004` directly. No dataset cache is copied to RAM or local scratch. The paper loader uses bounded batch queues (24 train and 8 validation workers per rank by default); `/dev/shm` is needed for the queues, not for the dataset itself. The runner checks for 80 GiB available RAM and 24 GiB free shared-memory space when the Linux counters are available. For Slurm, the reference allocation is `--mem=105G --cpus-per-task=60` for both ranks together. A known Slurm RAM allocation below 80 GiB is rejected even if the node has ample free RAM.
-
-Continue a new run with the same options and `--resume runs/p004-paper-v1/weights/checkpoint_last.pth`. For a trusted native `linear_v1` checkpoint, the runner checks the saved paper flags, age schedule, and optimizer; continuing training additionally requires both original rank RNG states. Use a new output directory for that continuation and retain the original best checkpoint. To replay ImageNet validation without training or writing checkpoints, use the paper recipe with `--evaluate --resume /path/to/checkpoint_best.pth` and the same ImageNet split.
-
-Use the same ImageNet bytes, PyTorch/CUDA, torchvision, Kornia, and Pillow versions, and comparable GPU topology for quantitative retraining comparisons. The original B200 protocol used the torch 2.7.1 / CUDA 12.8 stack. The data manifest hashes all ordered IDs and labels, but only spot-checks JPEG bytes. A new run is not a bitwise reproduction of the archived weights: GPU FFT/scatter arithmetic and the exact original resume history still matter. Replaying the paper metrics requires the archived checkpoint and evaluation inputs, not a fresh training run.
-
-The general CLI selects the same V=1 **visual transform** as P004 under the matching input geometry, but retains its separate trainer. Its CPU sample augmentations, Adam defaults and rank-local validation are not a replay of the P004 protocol. Use the paper runner above for a retraining comparison and the original checkpoint and evaluation preprocessing for exact analysis replay.
+The paper setup uses 256 px images, 512 images per GPU and 1,251 steps per epoch. It applies augmentation before DVD, then trains with FP16, synchronized batch normalization, class-weighted cross-entropy, and fused Adam (learning rate `1e-4`, weight decay `1e-6`). The best checkpoint is chosen by top-1 accuracy across all 50,000 unfiltered validation images.
 
 ## AI-Oriented: Steer Model Bias
 
-These controls are for experiments on how the **training visual diet steers model biases**, such as reliance on shape or texture. Vary how fast the model sees new information, which frequencies or amplitudes it sees first, or whether it receives random crops. **Skip this section if you only want to model human visual development.** Use the general training CLI for these experiments; `p004-paper` is fixed to the human schedule and paper augmentation.
+Use these controls to test whether changing the training visual diet shifts a model's reliance on shape or texture. Skip this section if you only want to model human development. The paper setup does not use these controls.
 
 ### Change Developmental Speed
 
@@ -133,7 +118,7 @@ These controls are for experiments on how the **training visual diet steers mode
 | `speed_components` | `("acuity", "contrast", "color")` by default. Select any subset, or use `()` to leave all timing unchanged. Unselected stages still develop at the human rate. |
 | `apply_acuity`, `apply_contrast`, `apply_color` | Separate switches that disable or enable each forward stage; they do not change its developmental speed. |
 
-In forward DVD, acuity uses its own developmental curve. For elapsed age fraction `u = t / 300`, a selected acuity stage evaluates the original double-exponential Gaussian width at `300 * V * u / (1 - u + V * u)` months. Selected contrast uses `p = H(t) ** (1 / V)`, where `H` is the human contrast Hill fit normalized at 300 months. Selected color evaluates the original color fit at `inverse_H(p)`. Retiming changes neither the underlying fits nor the birth and 300-month endpoints. Retiming acuity can still change the spectrum used to compute the contrast threshold, even when the contrast clock stays fixed.
+Forward acuity uses its own age curve: for `u = t / 300`, it evaluates the original Gaussian width at `300 * V * u / (1 - u + V * u)` months. Contrast uses `p = H(t) ** (1 / V)`, where `H` is the human contrast Hill fit normalized at 300 months; color uses age `inverse_H(p)`. These changes preserve the birth and 300-month endpoints. Changing acuity can still change the spectrum used to set the contrast threshold.
 
 For example, slow contrast development only:
 
@@ -170,7 +155,7 @@ crop = training_rrc(256, RRCConfig(enabled=True, scale=(0.08, 1.0)))
 aged = dvd(crop(x) if crop is not None else x, months=24)
 ```
 
-At V=1, the original forward transform is unchanged: its frequency line is the Gaussian half-gain and its amplitude gate acts on radial means. The flipped controls instead use calibrated Fourier coefficients on the even-reflected field, with two soft gates. For flips, `acuity` retimes the frequency gate and `contrast` retimes the amplitude gate. To preserve the previous flipped-mode behavior, select `("acuity", "contrast")`. Both flips at V=1 match the full-color 256 px inverse-DVD filter from the steering experiments. Flipped modes are full-color by default and return the input unchanged at 300 months. Random grayscale is also off by default for flipped modes in the training CLI.
+Forward DVD uses Gaussian acuity and a contrast gate on radial means. The flipped controls use soft gates on the reflected Fourier spectrum: `acuity` retimes the frequency gate and `contrast` retimes the amplitude gate. Select `("acuity", "contrast")` to leave color timing unchanged. Both flips at `V = 1` match the full-color inverse filter at 256 px. Flipped modes leave color intact by default, skip random grayscale, and return the input unchanged from 300 months onward.
 
 ```sh
 python -m scripts.main --describe-dvd --development-strategy dvd \
@@ -178,9 +163,13 @@ python -m scripts.main --describe-dvd --development-strategy dvd \
 python -m scripts.dvd_image input.jpg inverse.png --months 12 --invert-frequency --invert-amplitude
 ```
 
-Add the inversion and crop flags to the general training command. RRC is **off by default** and is never applied in validation. `--rrc` enables it independently of the DVD mode; `--rrc-scale MIN MAX` changes the area fraction and `--rrc-ratio MIN MAX` changes the aspect ratios (default 3:4 to 4:3). CLI crop draws use Kornia, not the browser's preview seed. The P004 paper recipe does not use RRC.
+In the general trainer, `--rrc` adds random resized crop. It is **off by default** and training-only. Use `--rrc-scale MIN MAX` for crop area and `--rrc-ratio MIN MAX` for aspect ratio (default 3:4 to 4:3).
 
 For transfer, keep the visual field and aspect ratio fixed (do not stretch the input). The flipped modes calibrate their birth amplitude quantile in a fixed physical 256 px reference band capped at the actual common Nyquist frequency. `--inverse-native-band` uses the complete sampled band instead. Very low resolutions may not support the requested birth frequency. Matching the physical filter does not guarantee invariant RN50 accuracy or shape bias across input resolutions.
+
+### Recipe B: Large-Ratio RRC
+
+Recipe B centers on random resized crops that retain **70-100% of the image area**, with a 3:4 to 4:3 aspect ratio. The [RGB augmentation function](dvd_scale_free/datasets/augmentations.py#L9) applies the crop, flip, rotation, perspective warp, and blur before DVD. The original training also used CutMix after DVD (probability `0.1`, alpha `0.2`) and label smoothing (`0.1`). The function covers image augmentation only; `--rrc` alone does not reproduce Recipe B.
 
 ### Replay a Steering Experiment
 

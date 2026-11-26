@@ -1,4 +1,4 @@
-"""Opt-in RN50 runner for the P004 DVD V=1 training protocol."""
+"""ResNet-50 ImageNet training with the paper augmentation and DVD schedule."""
 
 from datetime import timedelta
 import json
@@ -15,10 +15,9 @@ from torch import nn
 from torch.nn.modules._functions import SyncBatchNorm
 
 from ..dvd_scale_free import DVDConfig, DVDTrainingTransform
-from .protocol import same_dvd_protocol
+from .protocol import PAPER_RECIPE, same_dvd_protocol
 
 
-NAME = "p004-paper"
 RECIPE_DEFAULTS = dict(dataset_name="imagenet", development_strategy="dvd", epochs=150,
                        workers=24, world_size=2, log_freq=50, dvd_backend="batched")
 SHARED_IMAGENET = Path("/share/klab/datasets/cached_datasets/imagenet_p004")
@@ -35,7 +34,7 @@ def check_options(args):
     for key, expected in _FIXED.items():
         actual = getattr(args, key)
         if actual != expected:
-            raise ValueError(f"{NAME} requires {key}={expected!r}, got {actual!r}")
+            raise ValueError(f"The {PAPER_RECIPE} recipe requires {key}={expected!r}, got {actual!r}")
     if args.workers < 0 or args.log_freq <= 0 or args.save_checkpoint_every_epochs <= 0:
         raise ValueError("Invalid worker count or logging/checkpoint interval")
 
@@ -44,9 +43,9 @@ def describe(args, dvd):
     check_options(args)
     if (not isinstance(dvd, DVDTrainingTransform) or dvd.config != DVDConfig()
             or dvd.backend != "batched" or dvd.chunk != 128):
-        raise ValueError(f"{NAME} requires forward V=1 DVD with both spatial stages, "
+        raise ValueError(f"The {PAPER_RECIPE} recipe requires forward V=1 DVD with both spatial stages, "
                          "default anchors, 15 degrees, and the batched backend")
-    return dict(name=NAME, version=1, seed=args.seed, world_size=2, batch_size_per_rank=512,
+    return dict(name=PAPER_RECIPE, version=1, seed=args.seed, world_size=2, batch_size_per_rank=512,
                 steps_per_epoch=STEPS_PER_EPOCH, train_workers=args.workers, val_workers=8,
                 optimizer={"name": "adam", "lr": args.lr, "weight_decay": args.weight_decay, "fused": True},
                 augmentation="paper-kornia-batched-gpu-before-dvd", effective_input="full-frame-256",
@@ -92,7 +91,7 @@ def _init_cuda(args):
     if (args.rank not in (0, 1) or args.gpu != args.rank or int(os.environ.get("WORLD_SIZE", 1)) != 2
             or int(os.environ.get("LOCAL_WORLD_SIZE", 1)) != 2
             or not torch.cuda.is_available() or not dist.is_nccl_available() or torch.cuda.device_count() < 2):
-        raise ValueError(f"{NAME} requires torchrun --standalone --nproc-per-node=2 and two CUDA GPUs")
+        raise ValueError(f"The {PAPER_RECIPE} recipe requires torchrun --standalone --nproc-per-node=2 and two CUDA GPUs")
     for name, value in dict(NCCL_SOCKET_IFNAME="lo", NCCL_NET="Socket", NCCL_P2P_DISABLE="0",
                             NCCL_CUMEM_ENABLE="0", NCCL_CUMEM_HOST_ENABLE="0").items():
         os.environ.setdefault(name, value)
@@ -218,7 +217,7 @@ def _check_checkpoint(state, args, manifest, ages):
                 "additional_aug", "crop_min")
         if (state.get("training_variant") != "linear_v1" or native.get("apply_contrast") != 0
                 or any(native.get(key) != getattr(args, key) for key in keys)):
-            raise ValueError("Not a matching native P004 linear_v1 checkpoint")
+            raise ValueError("Not a matching native paper checkpoint (linear_v1)")
     epoch = int(state["epoch"])
     if not -1 <= epoch < args.epochs or state.get("age_months_curve") != ages:
         raise ValueError("Checkpoint epoch or age schedule differs")
