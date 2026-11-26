@@ -18,6 +18,7 @@ import kornia
 import kornia.augmentation as K
 import kornia.filters as KF
 import dvd_scale_free.utils
+from dvd_scale_free.dvd_scale_free.rrc import rrc_from_args, training_rrc
 
 ##############################
 ## Testing datasets loader
@@ -209,8 +210,9 @@ class SupervisedLearningDataset:
         aug_list.append(K.Resize((self.args.image_size, self.args.image_size)))
     
         if train:
-            if getattr(self.args, "crop_min", 1.0)<1:
-                transforms.RandomResizedCrop(self.image_size, scale=(self.args.crop_min, 1.0)),
+            crop = training_rrc(self.args.image_size, rrc_from_args(self.args))
+            if crop is not None:
+                aug_list.append(crop)
             # Typical augmentations for training
             aug_list.append(K.RandomHorizontalFlip(p=0.25))
             aug_list.append(K.RandomRotation(degrees=15.0, p=0.25))

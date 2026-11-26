@@ -265,7 +265,7 @@ def _load_resume_checkpoint(path, args):
     current = getattr(args, "dvd_protocol", None)
     saved = checkpoint.get("dvd_protocol")
     if current and not getattr(args, "evaluate", False):
-        if saved != current and (saved is not None or current["method"] == "endpoint-linear"):
+        if saved != current and (saved is not None or current["method"] == "endpoint-linear" or current.get("rrc")):
             raise ValueError("DVD protocol differs or is missing; resume with the matching trainer and settings")
     return checkpoint
 

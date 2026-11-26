@@ -55,6 +55,38 @@ python tests/dvd_images_demo.py --dvd-method legacy --output legacy_gallery.pdf
 
 The adult contrast endpoint is still filtered. The demo-only `--unfiltered-at-300` returns the prepared input unchanged at 300 months and later; do not use it to reproduce training. The browser's slider limits are not training constraints.
 
+### Inverse DVD and Crop Controls
+
+Two independent spectral switches select the starting region:
+
+| Invert frequency | Invert amplitude | Starting region | Preset |
+| :---: | :---: | :--- | :--- |
+| Off | Off | Coarse frequencies, strong amplitudes | Original Endpoint Linear |
+| On | Off | Fine frequencies, strong amplitudes | Frequency-inverted control |
+| Off | On | Coarse frequencies, weak amplitudes | Amplitude-inverted, exploratory |
+| On | On | Fine frequencies, weak amplitudes | Full-color inverse-DVD |
+
+```python
+from dvd_scale_free.dvd_scale_free import make_curriculum
+from dvd_scale_free.dvd_scale_free.rrc import RRCConfig, training_rrc
+
+dvd = make_curriculum(invert_frequency=True, invert_amplitude=True, speed=1.0)
+crop = training_rrc(256, RRCConfig(enabled=True, scale=(0.08, 1.0)))
+aged = dvd(crop(x) if crop is not None else x, months=24)
+```
+
+The original forward transform is unchanged: its frequency line is the Gaussian half-gain and its amplitude gate acts on radial means. The flipped controls instead use calibrated Fourier coefficients on the even-reflected field, with two soft gates. Both flips match the full-color 256 px inverse-DVD filter from the steering experiments. Flipped modes are full-color by default and return the input unchanged at 300 months. Random grayscale is also off by default for flipped modes in the training CLI.
+
+```sh
+python -m scripts.main --describe-dvd --development_strategy dvd \
+  --invert-frequency --invert-amplitude --rrc --rrc-scale 0.08 1.0
+python -m scripts.dvd_image input.jpg inverse.png --months 12 --invert-frequency --invert-amplitude
+```
+
+Add those flags to the training command below. RRC is **off by default** and is never applied in validation. `--rrc` enables it independently of the DVD mode; `--rrc-scale MIN MAX` changes the area fraction and `--rrc-ratio MIN MAX` changes the aspect ratios (default 3:4 to 4:3). CLI crop draws use Kornia, not the browser's preview seed. The published paper augmentation has no RRC unless explicitly enabled.
+
+For transfer, keep the visual field and aspect ratio fixed (do not stretch the input). The flipped modes calibrate their birth amplitude quantile in a fixed physical 256 px reference band capped at the actual common Nyquist frequency. `--inverse-native-band` uses the complete sampled band instead. Very low resolutions may not support the requested birth frequency. Matching the physical filter does not guarantee invariant RN50 accuracy or shape bias across input resolutions.
+
 ### Legacy Scale-Free DVD
 
 The legacy path retains its log-frequency progress remapping, scale-free band settings, optional CSF and decomposition modes, and Gaussian or frequency-cutoff acuity. An Endpoint Linear V value is not a substitute for legacy `cs_logspan_start`.
@@ -91,6 +123,8 @@ WANDB_MODE=offline torchrun --standalone --nproc-per-node=2 -m scripts.main /dat
 ### Replaying an Existing Experiment
 
 This CLI selects the same V=1 **visual transform** as the P004 paper-augmentation run. It is **not** the same full training recipe. The original run also fixed ImageNet sample and class order, augmentation and resizing, optimizer and precision, distributed batch construction and random states, and checkpoint selection. It used GPU-batched paper augmentation and a specialized training and validation runtime. Matching V, age, and resolution alone does not reproduce that checkpoint, its validation accuracy, or its epoch time. Use the original checkpoint and evaluation preprocessing for exact analysis replay; use the original launcher and environment for a retraining comparison.
+
+For the matched shape/texture steering comparison, use the frozen best-validation RN50 checkpoints rather than retraining from the switches: standard e103, forward e148, full-color inverse e143, and full-color inverse with RRC e147. The inverse runs used the original packed, GPU-augmented pipeline. The matched RRC run used area `(0.08, 1.0)` and ratio `(0.75, 4/3)`, and neither inverse run used random grayscale. The reported scores were measured on unfiltered adult RGB (ImageNet at 256 px; cue conflict at 224 px).
 
 ### Tests
 

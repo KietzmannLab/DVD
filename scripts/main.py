@@ -21,6 +21,10 @@ import torch.utils.data.distributed
 from dvd_scale_free.dvd_scale_free._cli import adult_anchor, infant_anchor
 from dvd_scale_free.dvd_scale_free.endpoint_linear import EndpointConfig
 from dvd_scale_free.dvd_scale_free.endpoint_linear_fast import EndpointLinearTrainingTransform
+from dvd_scale_free.dvd_scale_free.inverse_endpoint_linear import (
+    REFERENCE_BAND_CPD, InverseConfig, InverseEndpointDVD,
+)
+from dvd_scale_free.dvd_scale_free.rrc import rrc_from_args
 
 parser = argparse.ArgumentParser(description="Model Training")
 parser.add_argument("data", metavar="DIR", nargs="?", help="path to dataset")
@@ -60,7 +64,8 @@ parser.add_argument("--time_order", default="chronological", type=str, choices=[
 parser.add_argument("--months_per_epoch", default=2, type=float, help="number of months per epoch")
 
 parser.add_argument("--apply_blur", type=int, choices=[0, 1], default=1, help="apply age-dependent acuity")
-parser.add_argument("--apply_color", type=int, choices=[0, 1], default=1, help="apply age-dependent color")
+parser.add_argument("--apply_color", type=int, choices=[0, 1],
+                    help="age-dependent color (default: on for forward, off for flipped modes)")
 parser.add_argument("--apply_contrast", type=int, choices=[0, 1], default=1, help="apply age-dependent contrast")
 parser.add_argument("--contrast_fov_deg", "--dvd-fov-deg", type=float, default=15.0)
 parser.add_argument("--contrast_soft_tau_log10", "--dvd-sigmoid-width-log10", type=float, default=0.10)
@@ -75,6 +80,14 @@ endpoint.add_argument("--endpoint-adult-cpd", type=adult_anchor, default=None,
 endpoint.add_argument("--endpoint-vertical-fov-deg", type=float, help="default: infer from image aspect ratio")
 endpoint.add_argument("--endpoint-backend", choices=["auto", "reference", "batched"], default="auto")
 endpoint.add_argument("--endpoint-chunk-size", type=int, default=128, help="images per batched FFT chunk")
+endpoint.add_argument("--invert-frequency", action="store_true", help="release fine spatial frequencies first")
+endpoint.add_argument("--invert-amplitude", action="store_true", help="release weak amplitudes first")
+endpoint.add_argument("--inverse-birth-cpd", type=float, default=2.)
+endpoint.add_argument("--inverse-quantile", type=float, default=.5)
+endpoint.add_argument("--inverse-taper", type=float, default=.2)
+endpoint.add_argument("--inverse-native-band", action="store_true",
+                      help="calibrate to the current Nyquist band instead of the 256 px reference band")
+endpoint.add_argument("--inverse-chunk-size", type=int, default=32)
 
 legacy = parser.add_argument_group("Legacy DVD options (require --dvd-method legacy)")
 legacy.add_argument("--contrast_amplitude_beta", default=1e-4, type=float)
@@ -109,10 +122,15 @@ parser.add_argument("--class-weights-json-path", default=None, type=str)
 parser.add_argument("--label-smoothing", default=0.0, type=float)
 parser.add_argument("--resize_to_224", default=0, type=int)
 parser.add_argument("--resize_to_256", default=0, type=int)
-parser.add_argument("--grayscale-aug", default=1, type=int)
+parser.add_argument("--grayscale-aug", type=int, choices=[0, 1],
+                    help="random grayscale (default: off for flipped modes, on otherwise)")
 parser.add_argument("--blur-aug", default=1, type=int)
 parser.add_argument("--additional-aug", default=1, type=int)
-parser.add_argument("--crop-min", default=1.0, type=float)
+parser.add_argument("--rrc", action=argparse.BooleanOptionalAction, default=False,
+                    help="training-only random resized crop (default: off)")
+parser.add_argument("--rrc-scale", type=float, nargs=2, metavar=("MIN", "MAX"), help="crop area fraction (default: .08 1)")
+parser.add_argument("--rrc-ratio", type=float, nargs=2, metavar=("MIN", "MAX"), help="crop aspect ratio (default: .75 1.3333)")
+parser.add_argument("--crop-min", default=1.0, type=float, help="legacy alias for RRC minimum area; requires --rrc")
 parser.add_argument("--best-acc1", default=0.0, type=float)
 
 def setup_logging_and_wandb(args):
@@ -176,6 +194,10 @@ def setup_logging_and_wandb(args):
             f"{args.arch}_{args.dataset_name}_{args.image_size}_"
             f"{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}_seed_{args.seed}"
         )
+
+    if args.dvd_protocol.get("rrc") and args.dvd_protocol["method"] != "endpoint-linear":
+        tag = hashlib.sha256(json.dumps(args.dvd_protocol["rrc"], sort_keys=True).encode()).hexdigest()[:10]
+        net_name += f"_rrc_{tag}"
 
     wandb_run = None
     log_dir = f"logs/{net_name}"
@@ -245,12 +267,30 @@ def get_data_loaders(args):
 
 
 def build_dvd_transformer(args, age_months_curve: Optional[List[float]] = None):
+    flipped = args.invert_frequency or args.invert_amplitude
+    if flipped and (args.development_strategy != "dvd" or args.dvd_method != "endpoint-linear"):
+        raise ValueError("Spectrum flips require --development_strategy dvd --dvd-method endpoint-linear")
     if args.development_strategy != "dvd":
         return None
 
+    color = (not flipped) if args.apply_color is None else bool(args.apply_color)
     if args.dvd_method == "endpoint-linear":
         if args.apply_threshold_color or args.blur_mode != "gaussian" or not args.contrast_use_soft_mask:
             raise ValueError("Threshold color, frequency-mode acuity and hard masks require --dvd-method legacy")
+        if flipped:
+            if args.endpoint_backend == "reference":
+                raise ValueError("Spectrum flips use the batched reflected filter, not the forward reference backend")
+            return InverseEndpointDVD(InverseConfig(
+                invert_frequency=args.invert_frequency,
+                invert_amplitude=args.invert_amplitude,
+                speed=args.endpoint_speed, fov_deg=args.contrast_fov_deg,
+                vertical_fov_deg=args.endpoint_vertical_fov_deg,
+                birth_frequency_cpd=args.inverse_birth_cpd, amplitude_quantile=args.inverse_quantile,
+                taper=args.inverse_taper, chunk_size=args.inverse_chunk_size,
+                band_limit_cpd=None if args.inverse_native_band else REFERENCE_BAND_CPD,
+                apply_frequency=bool(args.apply_blur), apply_amplitude=bool(args.apply_contrast),
+                apply_color=color,
+            ))
         return EndpointLinearTrainingTransform(
             EndpointConfig(
                 speed=args.endpoint_speed,
@@ -260,7 +300,7 @@ def build_dvd_transformer(args, age_months_curve: Optional[List[float]] = None):
                 adult_anchor_cpd=args.endpoint_adult_cpd,
                 sigmoid_width_log10=args.contrast_soft_tau_log10,
                 apply_acuity=bool(args.apply_blur),
-                apply_color=bool(args.apply_color),
+                apply_color=color,
                 apply_contrast=bool(args.apply_contrast),
             ),
             backend=args.endpoint_backend,
@@ -271,7 +311,7 @@ def build_dvd_transformer(args, age_months_curve: Optional[List[float]] = None):
 
     cfg = DVDConfig(
         apply_blur=int(args.apply_blur),
-        apply_color=int(args.apply_color),
+        apply_color=int(color),
         apply_contrast=int(args.apply_contrast),
         apply_threshold_color=bool(int(args.apply_threshold_color)),
 
@@ -311,15 +351,21 @@ def build_dvd_transformer(args, age_months_curve: Optional[List[float]] = None):
 
 
 def describe_dvd(args, transformer):
+    crop = rrc_from_args(args)
+    augmentation = {"rrc": asdict(crop)} if crop.enabled else {}
     if transformer is None:
-        return {"method": "adult"}
+        return {"method": "adult", **augmentation}
     protocol = {
         "method": args.dvd_method,
         "epochs": args.epochs,
         "months_per_epoch": args.months_per_epoch,
         "time_order": args.time_order,
+        **augmentation,
     }
-    if args.dvd_method == "endpoint-linear":
+    if isinstance(transformer, InverseEndpointDVD):
+        protocol.update(version=1, config=asdict(transformer.config), backend="reflected-batched",
+                        grayscale_aug=0 if args.grayscale_aug is None else args.grayscale_aug)
+    elif args.dvd_method == "endpoint-linear":
         protocol.update(version=1, config=asdict(transformer.config),
                         backend=transformer.backend, chunk_size=transformer.chunk)
     else:
@@ -454,6 +500,13 @@ def train(
 
 def main():
     args = parser.parse_args()
+    flipped = args.invert_frequency or args.invert_amplitude
+    if args.apply_color is None:
+        args.apply_color = int(not flipped)
+    if args.grayscale_aug is None:
+        args.grayscale_aug = int(not flipped)
+    if args.rrc and args.dataset_name == "rgbd_texture2shape_miniecoset":
+        parser.error("RRC in this trainer supports the RGB pipeline, not the paired RGB-D pipeline")
     try:
         dvdt = build_dvd_transformer(args)
         args.dvd_protocol = describe_dvd(args, dvdt)
