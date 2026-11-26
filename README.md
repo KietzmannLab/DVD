@@ -17,15 +17,17 @@ cd DVD
 python -m pip install -e '.[demo,train]'
 ```
 
-The planned end age in months is `epochs * months_per_epoch`. For a fixed training budget, set `months_per_epoch = 300 / epochs` to span birth to **25 years (300 months)**. If you fix the number of months per epoch instead, divide your target age in months by that value and round up to get the number of epochs.
+Choose a DVD schedule below to span birth to **25 years (300 months)**. The planned end age is `epochs * months_per_epoch`.
 
-| Training epochs | Months per epoch | End age |
-| :--- | :--- | :--- |
-| 150 | 2 | 300 months (25 years) |
-| 300 | 1 | 300 months (25 years) |
-| 180 | 2 | 360 months (30 years) |
+| DVD schedule | Training epochs | Months per epoch | Planned end age |
+| :--- | :--- | :--- | :--- |
+| DVD-B | 150 | 2 | 300 months (25 years) |
+| DVD-S | 300 | 1 | 300 months (25 years) |
+| DVD-P | 75 | 4 | 300 months (25 years) |
 
-The first batch is at 0 months; the last batch is just before the planned boundary. For example, at 2 months per epoch, run **at least 151 epochs** to train on batches at 300 months or later. At and beyond 300 months, the forward contrast filter stays at its adult maturation level; it does not switch off.
+The first batch is at 0 months; the last batch is just before the planned boundary. To include training inputs at 300 months or beyond, keep the schedule's months per epoch and add epochs. For example, DVD-B first presents 300-month inputs at the start of epoch 151. At and beyond 300 months, the forward contrast filter stays at its adult maturation level; it does not switch off.
+
+The example below uses the DVD-B schedule:
 
 ```sh
 WANDB_MODE=offline torchrun --standalone --nproc-per-node=2 -m scripts.main /data \
