@@ -54,7 +54,7 @@ python tests/dvd_images_demo.py --dvd-method legacy --output legacy_gallery.pdf
 | `adult_anchor_cpd` | `None` (auto): `0.98 * 224 / (2 * 15)` cpd (about 7.3173), capped at 98% of the smaller axis Nyquist frequency. To override, pass a number or `"nyquist"` to use the actual grid's capped Nyquist frequency. |
 | `sigmoid_width_log10` | `0.10` log10 amplitude units. |
 
-The shared clock uses the original contrast-speed rule: `p = H(t) ** (1 / V)`, where the human contrast Hill fit `H` is normalized at 300 months. Selected acuity and color curves are evaluated at the equivalent age `inverse_H(p)`; selected contrast uses `p` directly. This changes timing, not the fitted curves or the birth and 300-month endpoints. Retiming acuity can also change the image spectrum used to compute the contrast threshold, even when contrast timing is held fixed.
+Forward visual acuity has its own clock. For elapsed age fraction `u = t / 300`, a selected acuity stage evaluates the original double-exponential Gaussian width at `300 * V * u / (1 - u + V * u)` months. This is a time warp, not a contrast-sensitivity fit. Contrast retains `p = H(t) ** (1 / V)`, where `H` is the human contrast Hill fit normalized at 300 months. Selected color retains its previous timing at `inverse_H(p)`. These settings change timing, not the underlying fits or the birth and 300-month endpoints. Retiming acuity can change the image spectrum used to compute the contrast threshold, even when contrast timing is held fixed.
 
 To reproduce the previous contrast-only behavior at a non-unit V:
 
@@ -132,7 +132,7 @@ WANDB_MODE=offline torchrun --standalone --nproc-per-node=2 -m scripts.main /dat
 - Use `--dvd-method legacy` for the original scale-free CLI. For example, `--cs_logspan_start 0.005` selects the legacy remapping parameter. The legacy CLI defaults to enabling the optional Barten CSF; add `--contrast_use_barten_csf 0` to match the legacy Python API defaults.
 - To retime only contrast, use `--endpoint-speed 0.5 --endpoint-speed-components contrast`. To retime multiple curves, list them after the flag (e.g., `acuity contrast`).
 - The new training transform uses chunked, batched real FFTs for square float32 RGB or single-channel batches at least 224 px with default geometry and both spatial stages enabled. Other settings or diagnostic requests use the reference path, which can be slower. `--endpoint-backend batched` checks that the training input can use the accelerated path; `--endpoint-chunk-size` controls its temporary memory.
-- Validation uses adult (unfiltered) inputs. Endpoint Linear checkpoints record the filter, schedule, and selected speed components; resume with matching options. To resume an older checkpoint, pass its path with `--resume` and use equivalent timing: V=1, the previous contrast-only timing for forward mode, or both spectral gates for flipped modes. Use a separate working directory for independent runs.
+- Validation uses adult (unfiltered) inputs. Endpoint Linear checkpoints record the filter, schedule, and selected speed components; resume with matching options. The independent acuity clock is recorded when active, so a forward checkpoint trained with the earlier Hill-retimed acuity must be resumed with its original revision. For older contrast-only checkpoints, use `--resume` with the matching contrast-only settings. Use a separate working directory for independent runs.
 
 ### Replaying an Existing Experiment
 

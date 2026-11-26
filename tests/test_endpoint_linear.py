@@ -29,19 +29,27 @@ class EndpointTests(unittest.TestCase):
             _, rows = EndpointLinearDVD(EndpointConfig(speed=v))(self.x, 48, return_diagnostics=True)
             row = rows[0]
             effective = row["acuity_age_months"]
-            self.assertEqual(row["color_age_months"], effective)
+            self.assertAlmostEqual(effective, 300 * 48 * v / (300 - 48 + 48 * v))
             self.assertAlmostEqual(row["contrast_progress"], contrast_sensitivity(48)**(1/v))
-            self.assertAlmostEqual(contrast_sensitivity(effective), row["contrast_progress"])
+            self.assertAlmostEqual(contrast_sensitivity(row["color_age_months"]), row["contrast_progress"])
             self.assertEqual(row["gaussian_sigma_deg"], acuity_sigma_degrees(effective))
-            self.assertEqual(row["color_weight"], paper_color_weight(effective))
-            torch.testing.assert_close(EndpointLinearDVD(EndpointConfig(speed=v))(self.x, 48),
-                                       EndpointLinearDVD()(self.x, effective), rtol=0, atol=2e-6)
+            self.assertEqual(row["color_weight"], paper_color_weight(row["color_age_months"]))
             effective_ages.append(effective)
         self.assertTrue(all(a < b for a, b in zip(effective_ages, effective_ages[1:])))
         for age in (0, 300, 310):
             for speed in (.01, 100.):
                 changed = EndpointLinearDVD(EndpointConfig(speed=speed))(self.x, age)
                 torch.testing.assert_close(changed, EndpointLinearDVD()(self.x, age), rtol=0, atol=0)
+
+    def test_acuity_uses_its_own_curve_and_clock(self):
+        stages = {"apply_contrast": False, "apply_color": False}
+        acuity = EndpointLinearDVD(EndpointConfig(**stages))
+        faster = EndpointLinearDVD(EndpointConfig(speed=2, speed_components=("acuity",), **stages))
+        value, rows = faster(self.x, 150, return_diagnostics=True)
+        self.assertEqual(rows[0]["acuity_age_months"], 200)
+        self.assertEqual(rows[0]["color_age_months"], 150)
+        self.assertEqual(rows[0]["contrast_progress"], contrast_sensitivity(150))
+        torch.testing.assert_close(value, acuity(self.x, 200), rtol=0, atol=0)
 
     def test_speed_selection_is_independent_of_stage_enablement(self):
         base = EndpointLinearDVD()

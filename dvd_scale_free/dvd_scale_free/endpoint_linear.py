@@ -117,14 +117,18 @@ class _Timing(NamedTuple):
 def _stage_timing(months, speed, components):
     base = contrast_sensitivity(months)
     progress = base ** (1 / speed) if speed != 1 and components else base
-    effective = months
-    if speed != 1 and 0 < months < ADULT_AGE_MONTHS and ("acuity" in components or "color" in components):
-        # Invert the same Hill fit used for legacy contrast speed, without refitting the other curves.
-        q = progress * _ADULT_CONTRAST
-        effective = min(ADULT_AGE_MONTHS, _CONTRAST_MIDPOINT * (q / (1 - q)) ** (1 / _CONTRAST_EXPONENT))
-    return _Timing(effective if "acuity" in components else months,
-                   effective if "color" in components else months,
-                   progress if "acuity" in components else base,
+    acuity_age = color_age = months
+    if speed != 1 and 0 < months < ADULT_AGE_MONTHS:
+        if "acuity" in components:
+            # Scale the odds of elapsed age; never use the contrast fit for Gaussian acuity.
+            age_fraction = months / ADULT_AGE_MONTHS
+            advanced = speed * age_fraction
+            acuity_age = ADULT_AGE_MONTHS * (advanced / (1 - age_fraction + advanced))
+        if "color" in components:
+            q = progress * _ADULT_CONTRAST
+            color_age = min(ADULT_AGE_MONTHS, _CONTRAST_MIDPOINT * (q / (1 - q)) ** (1 / _CONTRAST_EXPONENT))
+    # Flipped modes retain their original Hill-driven spectral gate, not the Gaussian acuity curve.
+    return _Timing(acuity_age, color_age, progress if "acuity" in components else base,
                    progress if "contrast" in components else base)
 
 

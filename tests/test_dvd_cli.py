@@ -57,7 +57,11 @@ class DVDCommandTests(unittest.TestCase):
         selective = describe([*speed, "--endpoint-speed-components", "contrast"])
         self.assertEqual(selective["config"]["speed_components"], ("contrast",))
         self.assertTrue(_same_dvd_protocol(old(selective), selective))
-        self.assertFalse(_same_dvd_protocol(old(selective), describe(speed)))
+        advanced = describe(speed)
+        self.assertEqual(advanced["acuity_clock"], "age-odds")
+        self.assertFalse(_same_dvd_protocol(old(selective), advanced))
+        earlier_v2 = {k: v for k, v in advanced.items() if k != "acuity_clock"}
+        self.assertFalse(_same_dvd_protocol(earlier_v2, advanced))
         flipped = describe([*speed, "--invert-frequency", "--invert-amplitude"])
         self.assertTrue(_same_dvd_protocol(old(flipped), flipped))
         flipped_color = describe([*speed, "--invert-frequency", "--apply_color", "1"])

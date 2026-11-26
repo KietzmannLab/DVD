@@ -371,6 +371,9 @@ def describe_dvd(args, transformer):
     elif args.dvd_method == "endpoint-linear":
         protocol.update(version=2, config=asdict(transformer.config),
                         backend=transformer.backend, chunk_size=transformer.chunk)
+        cfg = transformer.config
+        if cfg.speed != 1 and cfg.apply_acuity and "acuity" in cfg.speed_components:
+            protocol["acuity_clock"] = "age-odds"
     else:
         protocol["config"] = {
             key: value for key, value in vars(transformer.cfg).items() if key != "age_months_curve"
