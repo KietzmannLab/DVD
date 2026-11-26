@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Visualize RGB images across developmental ages. Use --dvd-method legacy
-to generate the original scale-free DVD gallery.
-"""
+"""Visualize RGB images across DVD developmental ages."""
 
 import argparse
 from pathlib import Path
@@ -14,7 +11,7 @@ import numpy as np
 from PIL import Image
 import torch
 
-from dvd_scale_free.dvd_scale_free.endpoint_linear import EndpointLinearDVD
+from dvd_scale_free import DVDTransformer
 
 
 # ------------------------------------------------------------
@@ -22,68 +19,6 @@ from dvd_scale_free.dvd_scale_free.endpoint_linear import EndpointLinearDVD
 # ------------------------------------------------------------
 AGES: List[int] = [1, 4, 16, 64, 256]
 IMG_SIZE: int = 256
-
-LEGACY_SETTINGS = dict(
-    # Global switches
-    apply_blur=1,
-    apply_color=1,
-    apply_contrast=1,
-    verbose=False,
-
-    # Whether flip the operation: decomposition of output behavior (Note: blur_mode need to be "freq" not "gaussian" model)
-    # normal case:  decomposition_mode="keep", color_decomposition_mode="blend" , blur_mode="gaussian" or  "freq"
-    # flip case:  decomposition_mode="remove", color_decomposition_mode="chroma_remove", blur_mode="freq"
-    decomposition_mode="keep", # "keep" | "remove" | "both"
-    decomposition_clamp=True,
-    color_decomposition_mode="blend", # "blend"| "chroma_remove"  | "chroma_keep" | "gray_base" 
-
-    # Input size
-    image_size=IMG_SIZE,
-    resize_input=True,
-    fully_random=False,
-
-    # Contrast sensitivity behavior
-    cs_progress_remap="log",               # "none" | "power" | "log"
-    cs_progress_mode="logsf_to_amplitude",
-    cs_logspan_start=5e-3, # Main hyperparameter in "log" mode (default). Sets the minimum starting point of the log-scale range. Smaller values correspond to higher contrast amplitude threshold, and therefore lower early visual contrast fidelity.
-    cs_to_amplitude_gamma=1.0,
-
-    # CPD / viewing geometry
-    cs_fov_deg=15.0,
-    cs_sf_min_cpd=0.0,
-    cs_sf_max_cpd=30.0,
-    cs_logsf_min_cpd=0.1,
-    cs_anchor_half_width_cpd=0.5,
-
-    # FFT / masking behavior
-    cs_restrict_to_band=True,
-    cs_demean_for_fft=True,
-    cs_keep_dc=True,
-    cs_band_range_mode="endpoints",
-    cs_anchor_half_width_bins=2,
-    cs_trim_low_pct=99.0,
-    cs_trim_high_pct=1.0,
-    cs_use_soft_mask=True,
-    cs_soft_tau_log10=0.10,
-    cs_keep_min=1e-4,
-    cs_keep_max=1.0,
-    cs_eps=1e-12,
-
-    # Scale-free parameterization
-    use_scale_free_geometry=True,
-    scale_free_reference_image_size=224,
-    scale_free_reference_fov_deg=15.0,
-
-    # Visual acuity behavior
-    blur_mode="gaussian",                  # "gaussian" | "freq"
-    acuity_apply_with_cs=True,
-    acuity_cpd_at_20_20=30.0,
-    acuity_soft_transition_cpd=1.0,
-    acuity_use_scale_free_cutoff=True,
-
-    # Chromatic sensitivity behavior
-    apply_threshold_color=False,
-)
 
 
 # ------------------------------------------------------------
@@ -123,18 +58,9 @@ def _vis_rgb(img_b3hw: torch.Tensor) -> np.ndarray:
 # Main
 # ------------------------------------------------------------
 @torch.no_grad()
-def make_demo(outfile: Path, method: str, device: str) -> None:
-    if method == "legacy":
-        from dvd_scale_free.dvd_scale_free.development import DVDConfig, DVDTransformer
-
-        cfg = DVDConfig(**LEGACY_SETTINGS)
-        dvdt = DVDTransformer(cfg)
-        caption = f"Legacy scale-free DVD | {cfg.blur_mode} blur | cs_logspan_start={cfg.cs_logspan_start:g}"
-        if cfg.decomposition_mode == "both":
-            raise ValueError("Select 'keep' or 'remove' for a single output image.")
-    else:
-        dvdt = EndpointLinearDVD()
-        caption = "Endpoint Linear DVD | V = 1 | Adult anchor: auto"
+def make_demo(outfile: Path, device: str) -> None:
+    dvdt = DVDTransformer()
+    caption = "DVD | V = 1 | Adult anchor: auto"
 
     items = [load_tensor_rgb(p, IMG_SIZE).to(device) for p in RGB_PATHS]
     row_labels = [p.name for p in RGB_PATHS]
@@ -173,9 +99,7 @@ def make_demo(outfile: Path, method: str, device: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dvd-method", choices=("endpoint-linear", "legacy"), default="endpoint-linear")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    make_demo(args.output or OUT_DIR / f"rgb_dvd_demo_{args.dvd_method}.pdf",
-              args.dvd_method, args.device)
+    make_demo(args.output or OUT_DIR / "rgb_dvd_demo.pdf", args.device)

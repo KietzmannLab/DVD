@@ -1,4 +1,4 @@
-"""Opt-in random resized crop for training, independent of the DVD curriculum."""
+"""Optional random resized crop, independent of the DVD curriculum."""
 
 from dataclasses import dataclass
 import math

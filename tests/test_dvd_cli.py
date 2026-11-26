@@ -1,4 +1,4 @@
-"""Training integration, the legacy opt-in, and the single-image command."""
+"""Training integration, checkpoint compatibility, and the single-image command."""
 
 import json
 import logging
@@ -12,10 +12,10 @@ from PIL import Image
 import torch
 from torch import nn
 
-from dvd_scale_free import utils
+from dvd_scale_free import DVDConfig, DVDTransformer, utils
 from dvd_scale_free.datasets.dataset_loader import SupervisedLearningDataset
-from dvd_scale_free.dvd_scale_free.development import DVDConfig, DVDTransformer
-from dvd_scale_free.models.loader import _load_resume_checkpoint, _same_dvd_protocol
+from dvd_scale_free.models.loader import _load_resume_checkpoint
+from dvd_scale_free.models.protocol import same_dvd_protocol
 from scripts import main
 
 
@@ -31,51 +31,56 @@ class DVDCommandTests(unittest.TestCase):
     def setUpClass(cls):
         torch.set_num_threads(2)
 
-    def test_describe_uses_new_default_only_for_dvd(self):
+    def test_describe_uses_dvd_only_when_selected(self):
         bare = command("-m", "scripts.main", "--describe-dvd")
         self.assertEqual(json.loads(bare.stdout), {"method": "adult"})
         latest = command("-m", "scripts.main", "--describe-dvd", "--development_strategy", "dvd")
         protocol = json.loads(latest.stdout)
-        self.assertEqual(protocol["method"], "endpoint-linear")
+        self.assertEqual(protocol["method"], "dvd")
         self.assertEqual(protocol["config"]["speed"], 1)
         self.assertTrue(protocol["config"]["apply_contrast"])
         self.assertEqual(protocol["config"]["speed_components"], ["acuity", "contrast", "color"])
         self.assertIsNone(protocol["config"]["adult_anchor_cpd"])
         self.assertFalse(protocol["config"]["unfiltered_at_300"])
 
-    def test_cli_speed_components_and_v1_checkpoint_compatibility(self):
+    def test_cli_speed_components_and_checkpoint_compatibility(self):
         def describe(flags):
             args = main.parser.parse_args(["--development_strategy", "dvd", *flags])
             return main.describe_dvd(args, main.build_dvd_transformer(args))
 
         def old(protocol):
-            return dict(protocol, version=1, config={k: v for k, v in protocol["config"].items()
-                                                     if k != "speed_components"})
+            return dict(protocol, method="endpoint-linear", version=1,
+                        config={k: v for k, v in protocol["config"].items() if k != "speed_components"})
 
         default = describe([])
-        self.assertTrue(_same_dvd_protocol(old(default), default))
-        speed = ["--endpoint-speed", ".5"]
-        selective = describe([*speed, "--endpoint-speed-components", "contrast"])
+        self.assertTrue(same_dvd_protocol(old(default), default))
+        self.assertTrue(same_dvd_protocol(dict(default, method="endpoint-linear"), default))
+        self.assertFalse(same_dvd_protocol(dict(default, method="legacy"), default))
+        speed = ["--dvd-speed", ".5"]
+        selective = describe([*speed, "--dvd-speed-components", "contrast"])
         self.assertEqual(selective["config"]["speed_components"], ("contrast",))
-        self.assertTrue(_same_dvd_protocol(old(selective), selective))
+        self.assertTrue(same_dvd_protocol(old(selective), selective))
         advanced = describe(speed)
         self.assertEqual(advanced["acuity_clock"], "age-odds")
-        self.assertFalse(_same_dvd_protocol(old(selective), advanced))
+        self.assertFalse(same_dvd_protocol(old(selective), advanced))
         earlier_v2 = {k: v for k, v in advanced.items() if k != "acuity_clock"}
-        self.assertFalse(_same_dvd_protocol(earlier_v2, advanced))
+        self.assertFalse(same_dvd_protocol(earlier_v2, advanced))
         flipped = describe([*speed, "--invert-frequency", "--invert-amplitude"])
-        self.assertTrue(_same_dvd_protocol(old(flipped), flipped))
+        self.assertTrue(same_dvd_protocol(old(flipped), flipped))
         flipped_color = describe([*speed, "--invert-frequency", "--apply_color", "1"])
-        self.assertFalse(_same_dvd_protocol(old(flipped_color), flipped_color))
+        self.assertFalse(same_dvd_protocol(old(flipped_color), flipped_color))
 
-    def test_legacy_cli_reproduces_original_api_with_matching_flags(self):
-        args = main.parser.parse_args(["--development_strategy", "dvd", "--dvd-method", "legacy",
-                                       "--cs_logspan_start", ".02", "--contrast_use_barten_csf", "0",
-                                       "--image-size", "64"])
-        legacy = main.build_dvd_transformer(args)
-        original = DVDTransformer(DVDConfig(image_size=64, cs_logspan_start=.02))
+    def test_short_api_and_dvd_cli_geometry(self):
+        args = main.parse_args(["--development-strategy", "dvd", "--dvd-fov-deg", "14",
+                               "--dvd-vertical-fov-deg", "12", "--dvd-infant-cpd", "fundamental",
+                               "--dvd-adult-cpd", "nyquist", "--dvd-sigmoid-width-log10", ".12",
+                               "--dvd-backend", "reference", "--dvd-chunk-size", "16"])
+        cli_dvd = main.build_dvd_transformer(args)
+        api_dvd = DVDTransformer(DVDConfig(fov_deg=14, vertical_fov_deg=12, infant_anchor_cpd="fundamental",
+                                          adult_anchor_cpd="nyquist", sigmoid_width_log10=.12))
+        self.assertEqual(main.describe_dvd(args, cli_dvd)["chunk_size"], 16)
         x = torch.rand(2, 3, 64, 64)
-        torch.testing.assert_close(legacy(x, 16), original(x, 16), rtol=0, atol=0)
+        torch.testing.assert_close(cli_dvd(x, 16), api_dvd(x, 16), rtol=0, atol=0)
 
     def test_image_command_preserves_size_and_records_anchor(self):
         with TemporaryDirectory() as directory:
@@ -132,6 +137,9 @@ class DVDCommandTests(unittest.TestCase):
                 {"state_dict": model.state_dict(), "dvd_protocol": args.dvd_protocol}, str(path))
             result = _load_resume_checkpoint(path, args)
             torch.testing.assert_close(result["state_dict"]["2.weight"], model[-1].weight)
+            result["dvd_protocol"] = dict(result["dvd_protocol"], method="endpoint-linear")
+            utils.save_last_checkpoint(result, str(path))
+            self.assertEqual(_load_resume_checkpoint(path, args)["dvd_protocol"]["method"], "endpoint-linear")
             args.dvd_protocol = {**args.dvd_protocol, "time_order": "random"}
             with self.assertRaisesRegex(ValueError, "DVD protocol differs"):
                 _load_resume_checkpoint(path, args)

@@ -1,13 +1,13 @@
-"""Endpoint Linear DVD and its optional training controls."""
+"""DVD and its optional training controls."""
 
-from .endpoint_linear import EndpointConfig, EndpointLinearDVD
-from .endpoint_linear_fast import EndpointLinearTrainingTransform
-from .inverse_endpoint_linear import InverseConfig, InverseEndpointDVD
+from .development import DVDConfig, DVDTransformer
+from .development_fast import DVDTrainingTransform
+from .inverse import InverseConfig, InverseDVD
 
 
 def make_curriculum(*, invert_frequency=False, invert_amplitude=False, **options):
-    """Neither flip: original Endpoint Linear. Both flips: full-colour inverse-DVD."""
+    """Create forward DVD or select the inverted frequency and amplitude gates."""
     if invert_frequency or invert_amplitude:
-        return InverseEndpointDVD(InverseConfig(
+        return InverseDVD(InverseConfig(
             invert_frequency=invert_frequency, invert_amplitude=invert_amplitude, **options))
-    return EndpointLinearTrainingTransform(EndpointConfig(**options))
+    return DVDTrainingTransform(DVDConfig(**options))

@@ -7,8 +7,8 @@ import math
 
 import torch
 
-from .endpoint_linear import (
-    AMPLITUDE_FLOOR, EndpointConfig, EndpointLinearDVD, _age, _blur, _grid, _luminance,
+from .development import (
+    AMPLITUDE_FLOOR, DVDTransformer, _age, _blur, _grid, _luminance,
     _stage_timing, acuity_sigma_degrees, paper_color_weight,
 )
 
@@ -28,12 +28,12 @@ def _basis(side, device):
     ids, _, counts, centers, band_ids, _ = _grid(side, side, 15., 15., device)
     populated = band_ids.tolist()
     indices = ids.reshape(side, side)[:, :side//2+1].reshape(-1)
-    geometry = EndpointLinearDVD()._geometry((side, side), (side, side))
+    geometry = DVDTransformer()._geometry((side, side), (side, side))
     left, right, fractions = [], [], []
     for anchor in (geometry["infant_anchor_cpd"], geometry["adult_anchor_cpd"]):
         j = bisect_left(centers, anchor)
         if not 0 < j < len(centers):
-            raise ValueError("Batched Endpoint Linear requires two in-band anchors")
+            raise ValueError("Batched DVD requires two in-band anchors")
         lo, hi = math.log(centers[j-1]), math.log(centers[j])
         left.append(populated[j-1])
         right.append(populated[j])
@@ -84,15 +84,15 @@ def _filter_spatial(images, sigma, progress, chunk):
     return out
 
 
-class EndpointLinearTrainingTransform(EndpointLinearDVD):
+class DVDTrainingTransform(DVDTransformer):
     """Auto-dispatch to the batched kernel where it matches the requested settings."""
 
     def __init__(self, config=None, *, backend="auto", chunk=128):
-        super().__init__(config if config is not None else EndpointConfig())
+        super().__init__(config)
         if backend not in ("auto", "reference", "batched") or type(chunk) is not int or chunk < 1:
             raise ValueError("Use backend auto/reference/batched and a positive integer FFT chunk size")
         if backend == "batched" and not supports_batched(self.config):
-            raise ValueError("Batched Endpoint Linear requires the default physical geometry and both spatial stages")
+            raise ValueError("Batched DVD requires the default physical geometry and both spatial stages")
         self.backend = backend
         self.chunk = chunk
 
@@ -103,7 +103,7 @@ class EndpointLinearTrainingTransform(EndpointLinearDVD):
                 and image.dtype == torch.float32 and image.device.type in ("cpu","cuda")):
             return "batched"
         if self.backend == "batched":
-            raise ValueError("Batched Endpoint Linear expects nonempty square float32 NCHW input at least 224 px on CPU/CUDA")
+            raise ValueError("Batched DVD expects nonempty square float32 NCHW input at least 224 px on CPU/CUDA")
         return "reference"
 
     @torch.no_grad()

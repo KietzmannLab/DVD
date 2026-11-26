@@ -1,4 +1,4 @@
-"""Apply Endpoint Linear DVD to one image and print the resolved filter settings."""
+"""Apply DVD to one image and print the resolved filter settings."""
 
 import argparse
 import json
@@ -8,9 +8,10 @@ from PIL import Image, ImageOps
 import torch
 from torch.nn.functional import interpolate
 
-from dvd_scale_free.dvd_scale_free.inverse_endpoint_linear import REFERENCE_BAND_CPD, InverseConfig, InverseEndpointDVD
+from dvd_scale_free import DVDConfig, DVDTransformer, InverseConfig, InverseDVD
 from dvd_scale_free.dvd_scale_free._cli import adult_anchor, infant_anchor
-from dvd_scale_free.dvd_scale_free.endpoint_linear import SPEED_COMPONENTS, EndpointConfig, EndpointLinearDVD
+from dvd_scale_free.dvd_scale_free.development import SPEED_COMPONENTS
+from dvd_scale_free.dvd_scale_free.inverse import REFERENCE_BAND_CPD
 
 
 def image_size(value):
@@ -66,7 +67,7 @@ def main():
         color = not flipped if args.dvd_color is None else args.dvd_color
         common = dict(speed=args.speed, speed_components=args.speed_components,
                       fov_deg=args.fov_deg, vertical_fov_deg=args.vertical_fov_deg, apply_color=color)
-        cfg = EndpointConfig(
+        cfg = DVDConfig(
             **common, infant_anchor_cpd=args.infant_anchor_cpd, adult_anchor_cpd=args.adult_anchor_cpd,
             sigmoid_width_log10=args.sigmoid_width_log10, image_size=args.image_size,
             unfiltered_at_300=args.unfiltered_at_300,
@@ -80,12 +81,12 @@ def main():
                     x = interpolate(x[None], size=size, mode="bilinear", align_corners=False, antialias=True)[0]
                 if common["vertical_fov_deg"] is None:
                     common["vertical_fov_deg"] = args.fov_deg * h / w
-            dvd = InverseEndpointDVD(InverseConfig(
+            dvd = InverseDVD(InverseConfig(
                 **common, invert_frequency=args.invert_frequency, invert_amplitude=args.invert_amplitude,
                 birth_frequency_cpd=args.inverse_birth_cpd, amplitude_quantile=args.inverse_quantile,
                 taper=args.inverse_taper, band_limit_cpd=None if args.inverse_native_band else REFERENCE_BAND_CPD))
         else:
-            dvd = EndpointLinearDVD(cfg)
+            dvd = DVDTransformer(cfg)
         y, meta = dvd(x, args.months, return_diagnostics=True)
     except ValueError as exc:
         parser.error(str(exc))

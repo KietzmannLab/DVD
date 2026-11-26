@@ -96,6 +96,8 @@ class PaperRunnerTests(unittest.TestCase):
         result = cli(*args)
         self.assertEqual(result.returncode, 0, result.stderr)
         protocol = json.loads(result.stdout)
+        self.assertEqual(protocol["method"], "dvd")
+        self.assertEqual(protocol["backend"], "batched")
         self.assertTrue(protocol["config"]["apply_contrast"])
         self.assertFalse(protocol["config"]["unfiltered_at_300"])
         self.assertEqual(protocol["epochs"], 150)
@@ -162,6 +164,8 @@ class PaperRunnerTests(unittest.TestCase):
             paper._check_checkpoint(state, args, {}, [0., 2.])
         with self.assertRaisesRegex(ValueError, "both ranks"):
             paper._check_checkpoint({**state, "rank_rng": []}, args, {}, [0., 1.])
+        prior_protocol = dict(args.dvd_protocol, method="endpoint-linear")
+        paper._check_checkpoint({**state, "dvd_protocol": prior_protocol, "input_manifest": {}}, args, {}, [0., 1.])
         with self.assertRaisesRegex(ValueError, "manifest differs"):
             paper._check_checkpoint({**state, "dvd_protocol": args.dvd_protocol}, args, {"train": "new"}, [0., 1.])
 

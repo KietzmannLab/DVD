@@ -18,7 +18,7 @@ import kornia
 import kornia.augmentation as K
 import kornia.filters as KF
 import dvd_scale_free.utils
-from dvd_scale_free.dvd_scale_free.rrc import rrc_from_args, training_rrc
+from dvd_scale_free.dvd_scale_free.helpers.rrc import rrc_from_args, training_rrc
 
 ##############################
 ## Testing datasets loader

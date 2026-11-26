@@ -1,4 +1,4 @@
-"""Reflected-spectrum Endpoint Linear controls, including the full-colour inverse."""
+"""Reflected-spectrum DVD controls, including the full-color inverse."""
 
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -8,7 +8,7 @@ import math
 import torch
 from torch import nn
 
-from .endpoint_linear import SPEED_COMPONENTS, SpeedComponent, _age, _luminance, _speed_components, _stage_timing, paper_color_weight
+from .development import SPEED_COMPONENTS, SpeedComponent, _age, _luminance, _speed_components, _stage_timing, paper_color_weight
 
 
 REFERENCE_BAND_CPD = .98 * 256 / 30
@@ -35,7 +35,7 @@ class InverseConfig:
 
     def __post_init__(self):
         if not (self.invert_frequency or self.invert_amplitude):
-            raise ValueError("Use EndpointLinearDVD for the original forward curriculum")
+            raise ValueError("Use DVDTransformer for the forward curriculum")
         for name in ("speed", "fov_deg", "vertical_fov_deg", "birth_frequency_cpd", "band_limit_cpd"):
             value = getattr(self, name)
             if value is None and name in ("vertical_fov_deg", "band_limit_cpd"):
@@ -84,7 +84,7 @@ def _quantile(x, q):
     return (lo+hi)*.5 if j-rank == .5 else torch.lerp(lo, hi, rank-i)
 
 
-class InverseEndpointDVD(nn.Module):
+class InverseDVD(nn.Module):
     """CHW/BCHW floats in [0, 1]; output keeps its size, with identity at 300 months."""
 
     def __init__(self, config: InverseConfig | None = None):

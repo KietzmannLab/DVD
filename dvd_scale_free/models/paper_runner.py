@@ -1,4 +1,4 @@
-"""Opt-in RN50 runner for the P004 Endpoint Linear V=1 training protocol."""
+"""Opt-in RN50 runner for the P004 DVD V=1 training protocol."""
 
 from datetime import timedelta
 import json
@@ -14,13 +14,13 @@ import torch.distributed as dist
 from torch import nn
 from torch.nn.modules._functions import SyncBatchNorm
 
-from ..dvd_scale_free.endpoint_linear import EndpointConfig
-from ..dvd_scale_free.endpoint_linear_fast import EndpointLinearTrainingTransform
+from ..dvd_scale_free import DVDConfig, DVDTrainingTransform
+from .protocol import same_dvd_protocol
 
 
 NAME = "p004-paper"
 RECIPE_DEFAULTS = dict(dataset_name="imagenet", development_strategy="dvd", epochs=150,
-                       workers=24, world_size=2, log_freq=50, endpoint_backend="batched")
+                       workers=24, world_size=2, log_freq=50, dvd_backend="batched")
 SHARED_IMAGENET = Path("/share/klab/datasets/cached_datasets/imagenet_p004")
 STEPS_PER_EPOCH = 1251
 _FIXED = dict(arch="resnet50", dataset_name="imagenet", image_size=256, batch_size_per_gpu=512,
@@ -42,9 +42,9 @@ def check_options(args):
 
 def describe(args, dvd):
     check_options(args)
-    if (not isinstance(dvd, EndpointLinearTrainingTransform) or dvd.config != EndpointConfig()
+    if (not isinstance(dvd, DVDTrainingTransform) or dvd.config != DVDConfig()
             or dvd.backend != "batched" or dvd.chunk != 128):
-        raise ValueError(f"{NAME} requires forward V=1 Endpoint Linear with both spatial stages, "
+        raise ValueError(f"{NAME} requires forward V=1 DVD with both spatial stages, "
                          "default anchors, 15 degrees, and the batched backend")
     return dict(name=NAME, version=1, seed=args.seed, world_size=2, batch_size_per_rank=512,
                 steps_per_epoch=STEPS_PER_EPOCH, train_workers=args.workers, val_workers=8,
@@ -208,7 +208,7 @@ def _restore_rng(state, device):
 
 def _check_checkpoint(state, args, manifest, ages):
     if "dvd_protocol" in state:
-        if state["dvd_protocol"] != args.dvd_protocol or state.get("input_manifest") != manifest:
+        if not same_dvd_protocol(state["dvd_protocol"], args.dvd_protocol) or state.get("input_manifest") != manifest:
             raise ValueError("Checkpoint recipe or ImageNet manifest differs")
     else:
         native = state.get("args", {})

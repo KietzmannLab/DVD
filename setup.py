@@ -1,7 +1,5 @@
 from setuptools import find_packages, setup
 
-legacy = ["torchvision", "kornia", "numpy"]
-
 setup(
     name="dvd_scale_free",
     version="1.2.0",
@@ -9,9 +7,9 @@ setup(
     python_requires=">=3.10",
     install_requires=["torch"],
     extras_require={
-        "legacy": legacy,
         "demo": ["Pillow", "matplotlib"],
-        "train": legacy + [
+        "train": [
+            "torchvision", "kornia", "numpy",
             "Pillow", "h5py", "PyYAML", "wandb", "timm", "scipy", "scikit-learn", "tqdm",
         ],
     },

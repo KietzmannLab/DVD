@@ -1,1 +1,1 @@
-"""Legacy scale-free DVD helpers."""
+"""Shared helpers for DVD training."""

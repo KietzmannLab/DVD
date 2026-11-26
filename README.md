@@ -7,7 +7,7 @@
 
 DVD is an image curriculum that models age-dependent visual acuity, contrast sensitivity, and color sensitivity during network training.
 
-**Latest on `scale_free`: Endpoint Linear DVD (V = 1).** The original scale-free implementation is still available in `dvd_scale_free/dvd_scale_free/development.py` with its existing API and defaults. The training CLI uses the new method only when DVD is requested; standard adult-input training remains the CLI default.
+**DVD scale-free v1 (Endpoint Linear version).** The default DVD configuration is forward training at `V = 1`, with acuity, contrast, and color enabled. The training CLI uses DVD when requested; standard adult-input training remains its default.
 
 ![Age-dependent visual development curves](./assets/DVD_trajectories.png)
 
@@ -19,13 +19,13 @@ cd DVD
 python -m pip install -e '.[demo,train]'
 ```
 
-For only the new Python transform, install with `python -m pip install -e .`. For the original Python transform, install with `python -m pip install -e '.[legacy]'`.
+For only the Python transform, install with `python -m pip install -e .`.
 
 ```python
 import torch
-from dvd_scale_free.dvd_scale_free.endpoint_linear import EndpointConfig, EndpointLinearDVD
+from dvd_scale_free import DVDConfig, DVDTransformer
 
-dvd = EndpointLinearDVD(EndpointConfig(speed=1.0))
+dvd = DVDTransformer(DVDConfig())
 x = torch.rand(1, 3, 256, 256)
 y, diagnostics = dvd(x, months=48, return_diagnostics=True)
 print(y.shape, diagnostics[0]["adult_anchor_cpd"])
@@ -34,12 +34,11 @@ print(y.shape, diagnostics[0]["adult_anchor_cpd"])
 Use float tensors in `[0, 1]`, before model normalization, in `CHW` or `NCHW` format. Single-channel images skip color development. For RGBA, only RGB is filtered. The transform keeps the input size unless `image_size` is set to a long-edge length or an explicit `(height, width)`. It runs without autograd.
 
 ```sh
-python -m scripts.dvd_image assets/example_stimuli/example_1.jpeg endpoint_48mo.png --months 48
-python tests/dvd_images_demo.py --output endpoint_gallery.pdf
-python tests/dvd_images_demo.py --dvd-method legacy --output legacy_gallery.pdf
+python -m scripts.dvd_image assets/example_stimuli/example_1.jpeg dvd_48mo.png --months 48
+python tests/dvd_images_demo.py --output dvd_gallery.pdf
 ```
 
-## Endpoint Linear Settings
+## DVD Settings
 
 1. **Acuity:** A reflected Gaussian filter is evaluated in angular frequency units (cycles per degree, cpd).
 2. **Contrast:** The luminance spectrum after acuity filtering gives two radial contrast-amplitude anchors. The threshold interpolates linearly between their amplitudes according to contrast maturation. A log-amplitude sigmoid attenuates frequencies below the threshold while preserving DC.
@@ -47,7 +46,7 @@ python tests/dvd_images_demo.py --dvd-method legacy --output legacy_gallery.pdf
 
 | Setting | Default and meaning |
 | :--- | :--- |
-| `speed` (V) | `1.0` uses the original acuity, contrast, and color fits. `V > 1` moves the selected curves to a later developmental age; `0 < V < 1` moves them to an earlier age. |
+| `speed` (V) | `1.0` uses the original acuity, contrast, and color fits. At a given month, `V > 1` advances the selected curves and `0 < V < 1` delays them. |
 | `speed_components` | `("acuity", "contrast", "color")` by default. Select any subset, or use `()` to leave all timing unchanged. Unselected stages still develop at their original rate; `apply_acuity`, `apply_contrast`, and `apply_color` separately control whether a stage runs. |
 | `fov_deg`, `vertical_fov_deg` | Horizontal visual angle is 15 degrees; by default, vertical angle follows the source aspect ratio. |
 | `infant_anchor_cpd` | `0.23` cpd; `"fundamental"` uses the lowest nonzero sampled frequency. |
@@ -59,7 +58,7 @@ Forward visual acuity has its own clock. For elapsed age fraction `u = t / 300`,
 To reproduce the previous contrast-only behavior at a non-unit V:
 
 ```python
-contrast_only = EndpointLinearDVD(EndpointConfig(speed=0.5, speed_components=("contrast",)))
+contrast_only = DVDTransformer(DVDConfig(speed=0.5, speed_components=("contrast",)))
 ```
 
 ```sh
@@ -74,14 +73,13 @@ Two independent spectral switches select the starting region:
 
 | Invert frequency | Invert amplitude | Starting region | Preset |
 | :---: | :---: | :--- | :--- |
-| Off | Off | Coarse frequencies, strong amplitudes | Original Endpoint Linear |
+| Off | Off | Coarse frequencies, strong amplitudes | Forward DVD |
 | On | Off | Fine frequencies, strong amplitudes | Frequency-inverted control |
 | Off | On | Coarse frequencies, weak amplitudes | Amplitude-inverted, exploratory |
 | On | On | Fine frequencies, weak amplitudes | Full-color inverse-DVD |
 
 ```python
-from dvd_scale_free.dvd_scale_free import make_curriculum
-from dvd_scale_free.dvd_scale_free.rrc import RRCConfig, training_rrc
+from dvd_scale_free import RRCConfig, make_curriculum, training_rrc
 
 dvd = make_curriculum(invert_frequency=True, invert_amplitude=True, speed=1.0)
 crop = training_rrc(256, RRCConfig(enabled=True, scale=(0.08, 1.0)))
@@ -91,7 +89,7 @@ aged = dvd(crop(x) if crop is not None else x, months=24)
 At V=1, the original forward transform is unchanged: its frequency line is the Gaussian half-gain and its amplitude gate acts on radial means. The flipped controls instead use calibrated Fourier coefficients on the even-reflected field, with two soft gates. For flips, `acuity` retimes the frequency gate and `contrast` retimes the amplitude gate. To preserve the previous flipped-mode behavior, select `("acuity", "contrast")`. Both flips at V=1 match the full-color 256 px inverse-DVD filter from the steering experiments. Flipped modes are full-color by default and return the input unchanged at 300 months. Random grayscale is also off by default for flipped modes in the training CLI.
 
 ```sh
-python -m scripts.main --describe-dvd --development_strategy dvd \
+python -m scripts.main --describe-dvd --development-strategy dvd \
   --invert-frequency --invert-amplitude --rrc --rrc-scale 0.08 1.0
 python -m scripts.dvd_image input.jpg inverse.png --months 12 --invert-frequency --invert-amplitude
 ```
@@ -100,23 +98,12 @@ Add those flags to the training command below. RRC is **off by default** and is 
 
 For transfer, keep the visual field and aspect ratio fixed (do not stretch the input). The flipped modes calibrate their birth amplitude quantile in a fixed physical 256 px reference band capped at the actual common Nyquist frequency. `--inverse-native-band` uses the complete sampled band instead. Very low resolutions may not support the requested birth frequency. Matching the physical filter does not guarantee invariant RN50 accuracy or shape bias across input resolutions.
 
-### Legacy Scale-Free DVD
-
-The legacy path retains its log-frequency progress remapping, scale-free band settings, optional CSF and decomposition modes, and Gaussian or frequency-cutoff acuity. An Endpoint Linear V value is not a substitute for legacy `cs_logspan_start`.
-
-```python
-from dvd_scale_free.dvd_scale_free.development import DVDConfig, DVDTransformer
-
-legacy = DVDTransformer(DVDConfig(image_size=256, cs_logspan_start=0.005))
-y_legacy = legacy(x, months=48)
-```
-
 ## Training
 
 Inspect the CLI defaults without loading data or allocating a GPU:
 
 ```sh
-python -m scripts.main --development_strategy dvd --describe-dvd
+python -m scripts.main --development-strategy dvd --describe-dvd
 ```
 
 For example, to use chronological V=1 on two GPUs with 150 epochs and two developmental months per epoch:
@@ -124,20 +111,19 @@ For example, to use chronological V=1 on two GPUs with 150 epochs and two develo
 ```sh
 WANDB_MODE=offline torchrun --standalone --nproc-per-node=2 -m scripts.main /data \
   --dataset-name imagenet --imagenet-path /data/imagenet --arch resnet50 \
-  --development_strategy dvd --dvd-method endpoint-linear \
+  --development-strategy dvd \
   --time_order chronological --months_per_epoch 2 --epochs 150 \
   --image-size 256 --batch-size-per-gpu 512 --lr 1e-4 --label-smoothing 0 --seed 0
 ```
 
-- Endpoint Linear contrast is **on** by default when DVD is selected. In the native P004 launcher, `--apply_contrast 0` disabled only the superseded paper contrast filter. Here it disables Endpoint Linear contrast itself; do not copy that flag.
-- Use `--dvd-method legacy` for the original scale-free CLI. For example, `--cs_logspan_start 0.005` selects the legacy remapping parameter. The legacy CLI defaults to enabling the optional Barten CSF; add `--contrast_use_barten_csf 0` to match the legacy Python API defaults.
-- To retime only contrast, use `--endpoint-speed 0.5 --endpoint-speed-components contrast`. To retime multiple curves, list them after the flag (e.g., `acuity contrast`).
-- The new training transform uses chunked, batched real FFTs for square float32 RGB or single-channel batches at least 224 px with default geometry and both spatial stages enabled. Other settings or diagnostic requests use the reference path, which can be slower. `--endpoint-backend batched` checks that the training input can use the accelerated path; `--endpoint-chunk-size` controls its temporary memory.
-- Validation uses adult (unfiltered) inputs. Endpoint Linear checkpoints record the filter, schedule, and selected speed components; resume with matching options. The independent acuity clock is recorded when active, so a forward checkpoint trained with the earlier Hill-retimed acuity must be resumed with its original revision. For older contrast-only checkpoints, use `--resume` with the matching contrast-only settings. Use a separate working directory for independent runs.
+- Contrast is **on** by default when DVD is selected. In the native P004 launcher, `--apply_contrast 0` disabled only the superseded paper contrast filter. Here it disables DVD contrast; do not copy that flag.
+- To retime only contrast, use `--dvd-speed 0.5 --dvd-speed-components contrast`. To retime multiple curves, list them after the flag (e.g., `acuity contrast`).
+- The training transform uses chunked, batched real FFTs for square float32 RGB or single-channel batches at least 224 px with default geometry and both spatial stages enabled. Other settings or diagnostic requests use the reference path, which can be slower. `--dvd-backend batched` requires the accelerated path; `--dvd-chunk-size` controls its temporary memory.
+- Validation uses adult (unfiltered) inputs. Checkpoints record the filter, schedule, and selected speed components; resume with matching settings. Use a separate working directory for independent runs.
 
 ### P004 Paper Runner
 
-The opt-in recipe ports the P004 runner used for the forward Endpoint Linear V=1 RN50 experiment. It does not change the general or legacy trainer. It requires a full ImageNet-1K ImageFolder tree and two CUDA GPUs on one node:
+The opt-in recipe ports the P004 runner used for the forward DVD V=1 RN50 experiment. It does not change the general trainer. It requires a full ImageNet-1K ImageFolder tree and two CUDA GPUs on one node:
 
 ```sh
 python -m scripts.main --training-recipe p004-paper --describe-dvd
@@ -149,7 +135,7 @@ torchrun --standalone --nproc-per-node=2 -m scripts.main \
 
 | Component | P004 paper recipe |
 | :--- | :--- |
-| Inputs and augmentation | Ordered JPEGs and common labels from ImageFolder. PIL short-edge resize, then full-frame bilinear 256 px resize (`align_corners=True`, no tensor antialias). Paper Kornia operators draw parameters per image in GPU batches, before FP32 Endpoint Linear. No RRC or Recipe B. |
+| Inputs and augmentation | Ordered JPEGs and common labels from ImageFolder. PIL short-edge resize, then full-frame bilinear 256 px resize (`align_corners=True`, no tensor antialias). Paper Kornia operators draw parameters per image in GPU batches, before FP32 DVD. No RRC or Recipe B. |
 | Schedule and optimizer | 150 epochs, 1,251 steps per epoch, 2 months per epoch, 512 images per rank, seed 0 by default. Class-weighted cross-entropy, fused Adam at `1e-4` with `weight_decay=1e-6`, channels-last layout, FP16 model autocast, GradScaler, and the full-batch SyncBN path. |
 | Validation and best | Eager inference on 50,000 unfiltered adult images, without augmentation. Both ranks reduce weighted loss and hit counts; best is chosen by whole-set top-1. |
 | Inputs and restart verification | Check ImageNet split sizes and class mapping and compare ordered ID hashes and sampled JPEG hashes on both ranks. Save the manifest, library versions, age schedule, optimizer/scaler, and each rank's separate RNG state. Last, best, and periodic checkpoints are written atomically. |
@@ -165,6 +151,12 @@ Use the same ImageNet bytes, PyTorch/CUDA, torchvision, Kornia, and Pillow versi
 The general CLI selects the same V=1 **visual transform** as P004 under the matching input geometry, but retains its separate trainer. Its CPU sample augmentations, Adam defaults and rank-local validation are not a replay of the P004 protocol. Use the paper runner above for a retraining comparison and the original checkpoint and evaluation preprocessing for exact analysis replay.
 
 For the matched shape/texture steering comparison, use the frozen best-validation RN50 checkpoints rather than retraining from the switches: standard e103, forward e148, full-color inverse e143, and full-color inverse with RRC e147. The inverse runs used the original packed, GPU-augmented pipeline. The matched RRC run used area `(0.08, 1.0)` and ratio `(0.75, 4/3)`, and neither inverse run used random grayscale. The reported scores were measured on unfiltered adult RGB (ImageNet at 256 px; cue conflict at 224 px).
+
+### Version History
+
+- The [last revision shipping the legacy method and the original v1 names](https://github.com/KietzmannLab/DVD/tree/413842b9d90d3a436ce6c32595552e204a2150cd) is `413842b`. Use that revision in a separate environment to replay log-frequency scale-free runs with `--dvd-method legacy` or `cs_logspan_start`. Those settings do not translate to v1.
+- The v1 forward API now uses `DVDConfig` and `DVDTransformer` from `dvd_scale_free`. In training commands, drop `--dvd-method endpoint-linear` and change `--endpoint-*` flags to `--dvd-*`. This renames the same algorithm; it does not change the filters or defaults.
+- New checkpoints identify the method as `dvd`. Use an explicit `--resume` path for previous v1 runs: the runner accepts the prior method name only if the remaining protocol matches. The numeric protocol schema is separate from the method's v1 name. A checkpoint trained with the earlier Hill-retimed acuity still requires its original revision.
 
 ### Tests
 

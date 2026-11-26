@@ -8,7 +8,6 @@ import logging
 import random
 from dataclasses import asdict
 from logging.config import fileConfig
-from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -18,13 +17,12 @@ import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
 
+from dvd_scale_free import DVDConfig, DVDTrainingTransform, InverseConfig, InverseDVD
 from dvd_scale_free.dvd_scale_free._cli import adult_anchor, infant_anchor
-from dvd_scale_free.dvd_scale_free.endpoint_linear import SPEED_COMPONENTS, EndpointConfig
-from dvd_scale_free.dvd_scale_free.endpoint_linear_fast import EndpointLinearTrainingTransform
-from dvd_scale_free.dvd_scale_free.inverse_endpoint_linear import (
-    REFERENCE_BAND_CPD, InverseConfig, InverseEndpointDVD,
-)
-from dvd_scale_free.dvd_scale_free.rrc import rrc_from_args
+from dvd_scale_free.dvd_scale_free.development import SPEED_COMPONENTS
+from dvd_scale_free.dvd_scale_free.helpers.rrc import rrc_from_args
+from dvd_scale_free.dvd_scale_free.helpers.schedule import generate_age_months_curve
+from dvd_scale_free.dvd_scale_free.inverse import REFERENCE_BAND_CPD
 
 recipe_option = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
 recipe_option.add_argument("--training-recipe", choices=("general", "p004-paper"), default="general",
@@ -59,8 +57,6 @@ parser.add_argument('--image-size', type=int, default=256)
 # Setting for development strategy
 parser.add_argument("--development_strategy", "--development-strategy", default="adult",
                     choices=["adult", "dvd"], help="use adult inputs or DVD during training")
-parser.add_argument("--dvd-method", default="endpoint-linear", choices=["endpoint-linear", "legacy"],
-                    help="DVD implementation when --development_strategy=dvd (default: endpoint-linear)")
 parser.add_argument("--describe-dvd", action="store_true",
                     help="print resolved DVD configuration as JSON and exit without loading data or GPUs")
 parser.add_argument("--time_order", default="chronological", type=str, choices=["chronological", "mid_phase", "random", "fully_random"])
@@ -71,56 +67,31 @@ parser.add_argument("--apply_color", type=int, choices=[0, 1],
                     help="age-dependent color (default: on for forward, off for flipped modes)")
 parser.add_argument("--apply_contrast", type=int, choices=[0, 1], default=1,
                     help="apply age-dependent contrast when DVD is selected (default: on)")
-parser.add_argument("--contrast_fov_deg", "--dvd-fov-deg", type=float, default=15.0)
-parser.add_argument("--contrast_soft_tau_log10", "--dvd-sigmoid-width-log10", type=float, default=0.10)
 
-endpoint = parser.add_argument_group("Endpoint Linear DVD options")
-endpoint.add_argument("--endpoint-speed", type=float, default=1.0,
-                      help="developmental speed V: >1 advances selected curves, <1 delays them (default: 1)")
-endpoint.add_argument("--endpoint-speed-components", nargs="*", choices=SPEED_COMPONENTS, default=SPEED_COMPONENTS,
-                      help="curves affected by V (default: all three; omit values to leave every curve at V=1)")
-endpoint.add_argument("--endpoint-infant-cpd", type=infant_anchor, default=0.23,
-                      help="infant anchor, as cpd or 'fundamental' (default: 0.23)")
-endpoint.add_argument("--endpoint-adult-cpd", type=adult_anchor, default=None,
-                      help="adult anchor, as cpd, 'nyquist', or 'auto' (default: auto)")
-endpoint.add_argument("--endpoint-vertical-fov-deg", type=float, help="default: infer from image aspect ratio")
-endpoint.add_argument("--endpoint-backend", choices=["auto", "reference", "batched"], default="auto")
-endpoint.add_argument("--endpoint-chunk-size", type=int, default=128, help="images per batched FFT chunk")
-endpoint.add_argument("--invert-frequency", action="store_true", help="release fine spatial frequencies first")
-endpoint.add_argument("--invert-amplitude", action="store_true", help="release weak amplitudes first")
-endpoint.add_argument("--inverse-birth-cpd", type=float, default=2.)
-endpoint.add_argument("--inverse-quantile", type=float, default=.5)
-endpoint.add_argument("--inverse-taper", type=float, default=.2)
-endpoint.add_argument("--inverse-native-band", action="store_true",
-                      help="calibrate to the current Nyquist band instead of the 256 px reference band")
-endpoint.add_argument("--inverse-chunk-size", type=int, default=32)
+dvd_options = parser.add_argument_group("DVD options")
+dvd_options.add_argument("--dvd-fov-deg", "--contrast_fov_deg", type=float, default=15.0)
+dvd_options.add_argument("--dvd-sigmoid-width-log10", "--contrast_soft_tau_log10", type=float, default=0.10)
+dvd_options.add_argument("--dvd-speed", type=float, default=1.0,
+                         help="developmental speed V: >1 advances selected curves, <1 delays them (default: 1)")
+dvd_options.add_argument("--dvd-speed-components", nargs="*", choices=SPEED_COMPONENTS, default=SPEED_COMPONENTS,
+                         help="curves affected by V (default: all three; omit values to leave every curve at V=1)")
+dvd_options.add_argument("--dvd-infant-cpd", type=infant_anchor, default=0.23,
+                         help="infant anchor, as cpd or 'fundamental' (default: 0.23)")
+dvd_options.add_argument("--dvd-adult-cpd", type=adult_anchor, default=None,
+                         help="adult anchor, as cpd, 'nyquist', or 'auto' (default: auto)")
+dvd_options.add_argument("--dvd-vertical-fov-deg", type=float, help="default: infer from image aspect ratio")
+dvd_options.add_argument("--dvd-backend", choices=["auto", "reference", "batched"], default="auto")
+dvd_options.add_argument("--dvd-chunk-size", type=int, default=128, help="images per batched FFT chunk")
 
-legacy = parser.add_argument_group("Legacy DVD options (require --dvd-method legacy)")
-legacy.add_argument("--contrast_amplitude_beta", default=1e-4, type=float)
-legacy.add_argument("--contrast_amplitude_lambda", default=150, type=float)
-legacy.add_argument("--apply_threshold_color", type=int, default=0)
-legacy.add_argument("--contrast_progress_mode", default="logsf_to_amplitude", choices=["logsf_to_amplitude", "linear_amplitude"])
-legacy.add_argument("--contrast_progress_remap", default="log", choices=["none", "power", "log"])
-legacy.add_argument("--contrast_progress_logspan_start", "--cs_logspan_start", type=float, default=5e-3)
-legacy.add_argument("--contrast_to_amplitude_gamma", type=float, default=1.0)
-legacy.add_argument("--blur_mode", default="gaussian", choices=["gaussian", "freq"])
-legacy.add_argument("--use_scale_free_geometry", type=int, default=1)
-legacy.add_argument("--acuity_use_scale_free_cutoff", type=int, default=1)
-legacy.add_argument("--contrast_use_barten_csf", type=int, default=1)
-legacy.add_argument("--contrast_use_csf_for_threshold_readout", type=int, default=0)
-legacy.add_argument("--contrast_csf_mode", default="relative_nyquist", choices=["absolute_cpd", "relative_nyquist"])
-legacy.add_argument("--contrast_use_soft_mask", type=int, default=1)
-legacy.add_argument("--contrast_band_range_mode", default="endpoints", choices=["endpoints", "trim"])
-legacy.add_argument("--contrast_keep_min", type=float, default=1e-4)
-legacy.add_argument("--contrast_keep_max", type=float, default=1.0)
-legacy.add_argument("--contrast_sf_min_frac_nyq", type=float, default=None)
-legacy.add_argument("--contrast_sf_max_frac_nyq", type=float, default=None)
-legacy.add_argument("--contrast_logsf_min_frac_nyq", type=float, default=None)
-legacy.add_argument("--contrast_anchor_half_width_frac_nyq", type=float, default=None)
-legacy.add_argument("--contrast_sf_min_cpd", type=float, default=0.0)
-legacy.add_argument("--contrast_sf_max_cpd", type=float, default=30.0)
-legacy.add_argument("--contrast_logsf_min_cpd", type=float, default=0.1)
-legacy.add_argument("--contrast_anchor_half_width_cpd", type=float, default=0.5)
+inverse_options = parser.add_argument_group("Inverse DVD options")
+inverse_options.add_argument("--invert-frequency", action="store_true", help="release fine spatial frequencies first")
+inverse_options.add_argument("--invert-amplitude", action="store_true", help="release weak amplitudes first")
+inverse_options.add_argument("--inverse-birth-cpd", type=float, default=2.)
+inverse_options.add_argument("--inverse-quantile", type=float, default=.5)
+inverse_options.add_argument("--inverse-taper", type=float, default=.2)
+inverse_options.add_argument("--inverse-native-band", action="store_true",
+                             help="calibrate to the current Nyquist band instead of the 256 px reference band")
+inverse_options.add_argument("--inverse-chunk-size", type=int, default=32)
 
 # additional configs:
 parser.add_argument('--pretrained', default='', type=str)
@@ -167,43 +138,12 @@ def setup_logging_and_wandb(args):
     logger = logging.getLogger()
     logger.disabled = True
 
-    # scale-free DVD hyperparameters (key one is just progress_logspan_suffix)
-    blur_mode_suffix = f"_blur{args.blur_mode}"
-    progress_mode_suffix = "" if args.contrast_progress_mode == "logsf_to_amplitude" else f"_pmode{args.contrast_progress_mode}"
-    progress_remap_suffix = "" if args.contrast_progress_remap == "log" else f"_premap{args.contrast_progress_remap}"
-    progress_logspan_suffix = "" if float(args.contrast_progress_logspan_start) == 5e-3 else f"_plogstart{args.contrast_progress_logspan_start}"
-    
-    progress_gamma_suffix = "" if float(args.contrast_to_amplitude_gamma) == 1.0 else f"_pgamma{args.contrast_to_amplitude_gamma}"
-    csf_suffix = "" if int(args.contrast_use_barten_csf) == 1 else "_noCSF"
-    csf_readout_suffix = "_csfReadout" if int(args.contrast_use_csf_for_threshold_readout) == 1 else ""
-    csf_mode_suffix = "" if args.contrast_csf_mode == "relative_nyquist" else f"_csfmode{args.contrast_csf_mode}"
-    scale_free_suffix = "" if int(args.use_scale_free_geometry) == 1 else "_absGeom"
-    acuity_scale_free_suffix = "" if int(args.acuity_use_scale_free_cutoff) == 1 else "_absAcuity"
-    soft_mask_suffix = "" if int(args.contrast_use_soft_mask) == 1 else "_hardMask"
-    band_range_suffix = "" if args.contrast_band_range_mode == "endpoints" else f"_band{args.contrast_band_range_mode}"
-    tau_suffix = "" if float(args.contrast_soft_tau_log10) == 0.10 else f"_tau{args.contrast_soft_tau_log10}"
-    fov_suffix = "" if float(args.contrast_fov_deg) == 15.0 else f"_fov{args.contrast_fov_deg}"
-    legacy_alpha_dn_suffix = f"_alpha{args.contrast_amplitude_beta}_dn{args.contrast_amplitude_lambda}"
-
-    if args.dvd_protocol["method"] == "endpoint-linear":
+    if args.dvd_protocol["method"] == "dvd":
         protocol = json.dumps(args.dvd_protocol, sort_keys=True).encode()
         tag = hashlib.sha256(protocol).hexdigest()[:12]
         net_name = (
             f"{args.arch}_{args.dataset_name}_{args.image_size}_{args.lr_scheduler}{args.lr}"
-            f"_dev_endpoint_linear_{tag}_seed_{args.seed}"
-        )
-    elif args.development_strategy == "dvd":
-        net_name = (
-            f"{args.arch}_mpe{args.months_per_epoch}"
-            f"{legacy_alpha_dn_suffix}_{args.dataset_name}"
-            f"_{args.image_size}_{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}"
-            f"_b{args.apply_blur}c{args.apply_color}cs{args.apply_contrast}"
-            f"_T_{args.time_order}"
-            f"{blur_mode_suffix}{progress_mode_suffix}{progress_remap_suffix}"
-            f"{progress_gamma_suffix}{progress_logspan_suffix}{csf_suffix}"
-            f"{csf_readout_suffix}{csf_mode_suffix}{scale_free_suffix}"
-            f"{acuity_scale_free_suffix}{soft_mask_suffix}{band_range_suffix}"
-            f"{tau_suffix}{fov_suffix}_seed_{args.seed}"
+            f"_dev_dvd_{tag}_seed_{args.seed}"
         )
     else:
         net_name = (
@@ -211,7 +151,7 @@ def setup_logging_and_wandb(args):
             f"{args.lr_scheduler}{args.lr}_dev_{args.development_strategy}_seed_{args.seed}"
         )
 
-    if args.dvd_protocol.get("rrc") and args.dvd_protocol["method"] != "endpoint-linear":
+    if args.dvd_protocol.get("rrc") and args.dvd_protocol["method"] != "dvd":
         tag = hashlib.sha256(json.dumps(args.dvd_protocol["rrc"], sort_keys=True).encode()).hexdigest()[:10]
         net_name += f"_rrc_{tag}"
 
@@ -282,89 +222,44 @@ def get_data_loaders(args):
     return train_loader, val_loader, train_sampler, val_sampler
 
 
-def build_dvd_transformer(args, age_months_curve: Optional[List[float]] = None):
+def build_dvd_transformer(args):
     flipped = args.invert_frequency or args.invert_amplitude
-    if flipped and (args.development_strategy != "dvd" or args.dvd_method != "endpoint-linear"):
-        raise ValueError("Spectrum flips require --development_strategy dvd --dvd-method endpoint-linear")
     if args.development_strategy != "dvd":
+        if flipped:
+            raise ValueError("Spectrum flips require --development-strategy dvd")
         return None
 
     color = (not flipped) if args.apply_color is None else bool(args.apply_color)
-    if args.dvd_method == "endpoint-linear":
-        if args.apply_threshold_color or args.blur_mode != "gaussian" or not args.contrast_use_soft_mask:
-            raise ValueError("Threshold color, frequency-mode acuity and hard masks require --dvd-method legacy")
-        if flipped:
-            if args.endpoint_backend == "reference":
-                raise ValueError("Spectrum flips use the batched reflected filter, not the forward reference backend")
-            return InverseEndpointDVD(InverseConfig(
-                invert_frequency=args.invert_frequency,
-                invert_amplitude=args.invert_amplitude,
-                speed=args.endpoint_speed, speed_components=args.endpoint_speed_components, fov_deg=args.contrast_fov_deg,
-                vertical_fov_deg=args.endpoint_vertical_fov_deg,
-                birth_frequency_cpd=args.inverse_birth_cpd, amplitude_quantile=args.inverse_quantile,
-                taper=args.inverse_taper, chunk_size=args.inverse_chunk_size,
-                band_limit_cpd=None if args.inverse_native_band else REFERENCE_BAND_CPD,
-                apply_frequency=bool(args.apply_blur), apply_amplitude=bool(args.apply_contrast),
-                apply_color=color,
-            ))
-        return EndpointLinearTrainingTransform(
-            EndpointConfig(
-                speed=args.endpoint_speed,
-                speed_components=args.endpoint_speed_components,
-                fov_deg=args.contrast_fov_deg,
-                vertical_fov_deg=args.endpoint_vertical_fov_deg,
-                infant_anchor_cpd=args.endpoint_infant_cpd,
-                adult_anchor_cpd=args.endpoint_adult_cpd,
-                sigmoid_width_log10=args.contrast_soft_tau_log10,
-                apply_acuity=bool(args.apply_blur),
-                apply_color=color,
-                apply_contrast=bool(args.apply_contrast),
-            ),
-            backend=args.endpoint_backend,
-            chunk=args.endpoint_chunk_size,
-        )
-
-    from dvd_scale_free.dvd_scale_free.development import DVDConfig, DVDTransformer
-
-    cfg = DVDConfig(
-        apply_blur=int(args.apply_blur),
-        apply_color=int(color),
-        apply_contrast=int(args.apply_contrast),
-        apply_threshold_color=bool(int(args.apply_threshold_color)),
-
-        image_size=int(args.image_size),
-        resize_input=True,
-        fully_random=(args.time_order == "fully_random"),
-        age_months_curve=age_months_curve,
-
-        blur_mode=str(args.blur_mode),
-        cs_fov_deg=float(args.contrast_fov_deg),
-        use_scale_free_geometry=bool(int(args.use_scale_free_geometry)),
-        acuity_use_scale_free_cutoff=bool(int(args.acuity_use_scale_free_cutoff)),
-
-        cs_progress_mode=args.contrast_progress_mode,
-        cs_progress_remap=args.contrast_progress_remap,
-        cs_logspan_start=args.contrast_progress_logspan_start,
-        cs_to_amplitude_gamma=args.contrast_to_amplitude_gamma,
-        cs_use_soft_mask=bool(args.contrast_use_soft_mask),
-        cs_soft_tau_log10=args.contrast_soft_tau_log10,
-        cs_band_range_mode=args.contrast_band_range_mode,
-        cs_keep_min=args.contrast_keep_min,
-        cs_keep_max=args.contrast_keep_max,
-        cs_sf_min_frac_nyq=args.contrast_sf_min_frac_nyq,
-        cs_sf_max_frac_nyq=args.contrast_sf_max_frac_nyq,
-        cs_logsf_min_frac_nyq=args.contrast_logsf_min_frac_nyq,
-        cs_anchor_half_width_frac_nyq=args.contrast_anchor_half_width_frac_nyq,
-        cs_sf_min_cpd=args.contrast_sf_min_cpd,
-        cs_sf_max_cpd=args.contrast_sf_max_cpd,
-        cs_logsf_min_cpd=args.contrast_logsf_min_cpd,
-        cs_anchor_half_width_cpd=args.contrast_anchor_half_width_cpd,
+    if flipped:
+        if args.dvd_backend == "reference":
+            raise ValueError("Spectrum flips use the batched reflected filter, not the forward reference backend")
+        return InverseDVD(InverseConfig(
+            invert_frequency=args.invert_frequency,
+            invert_amplitude=args.invert_amplitude,
+            speed=args.dvd_speed, speed_components=args.dvd_speed_components, fov_deg=args.dvd_fov_deg,
+            vertical_fov_deg=args.dvd_vertical_fov_deg,
+            birth_frequency_cpd=args.inverse_birth_cpd, amplitude_quantile=args.inverse_quantile,
+            taper=args.inverse_taper, chunk_size=args.inverse_chunk_size,
+            band_limit_cpd=None if args.inverse_native_band else REFERENCE_BAND_CPD,
+            apply_frequency=bool(args.apply_blur), apply_amplitude=bool(args.apply_contrast),
+            apply_color=color,
+        ))
+    return DVDTrainingTransform(
+        DVDConfig(
+            speed=args.dvd_speed,
+            speed_components=args.dvd_speed_components,
+            fov_deg=args.dvd_fov_deg,
+            vertical_fov_deg=args.dvd_vertical_fov_deg,
+            infant_anchor_cpd=args.dvd_infant_cpd,
+            adult_anchor_cpd=args.dvd_adult_cpd,
+            sigmoid_width_log10=args.dvd_sigmoid_width_log10,
+            apply_acuity=bool(args.apply_blur),
+            apply_color=color,
+            apply_contrast=bool(args.apply_contrast),
+        ),
+        backend=args.dvd_backend,
+        chunk=args.dvd_chunk_size,
     )
-    # The legacy helper reads these optional settings via getattr, not DVDConfig fields.
-    cfg.cs_use_barten_csf = bool(args.contrast_use_barten_csf)
-    cfg.cs_use_csf_for_threshold_readout = bool(args.contrast_use_csf_for_threshold_readout)
-    cfg.cs_csf_mode = args.contrast_csf_mode
-    return DVDTransformer(cfg)
 
 
 def describe_dvd(args, transformer):
@@ -373,29 +268,26 @@ def describe_dvd(args, transformer):
     if transformer is None:
         return {"method": "adult", **augmentation}
     protocol = {
-        "method": args.dvd_method,
+        "method": "dvd",
+        "version": 2,
+        "config": asdict(transformer.config),
         "epochs": args.epochs,
         "months_per_epoch": args.months_per_epoch,
         "time_order": args.time_order,
         **augmentation,
     }
-    if isinstance(transformer, InverseEndpointDVD):
-        protocol.update(version=2, config=asdict(transformer.config), backend="reflected-batched",
+    if isinstance(transformer, InverseDVD):
+        protocol.update(backend="reflected-batched",
                         grayscale_aug=0 if args.grayscale_aug is None else args.grayscale_aug)
-    elif args.dvd_method == "endpoint-linear":
-        protocol.update(version=2, config=asdict(transformer.config),
-                        backend=transformer.backend, chunk_size=transformer.chunk)
+    else:
+        protocol.update(backend=transformer.backend, chunk_size=transformer.chunk)
         cfg = transformer.config
         if cfg.speed != 1 and cfg.apply_acuity and "acuity" in cfg.speed_components:
             protocol["acuity_clock"] = "age-odds"
-    else:
-        protocol["config"] = {
-            key: value for key, value in vars(transformer.cfg).items() if key != "age_months_curve"
-        }
     return protocol
 
 
-def build_age_months_curve(args, iters_per_epoch: int) -> List[float]:
+def build_age_months_curve(args, iters_per_epoch: int) -> list[float]:
     if args.time_order == "fully_random":
         total_steps = int(args.epochs) * int(iters_per_epoch)
         max_age = float(args.months_per_epoch) * float(args.epochs)
@@ -403,8 +295,6 @@ def build_age_months_curve(args, iters_per_epoch: int) -> List[float]:
         g.manual_seed(int(args.seed))
         ages = torch.rand(total_steps, generator=g).tolist()
         return [float(a) * max_age for a in ages]
-
-    from dvd_scale_free.dvd_scale_free.development import generate_age_months_curve
 
     return generate_age_months_curve(
         args.epochs,
@@ -606,8 +496,6 @@ def main():
     best_acc1 = args.best_acc1
 
     age_months_curve = build_age_months_curve(args, iters_per_epoch=len(train_loader)) if dvdt else None
-    if args.dvd_protocol["method"] == "legacy":
-        dvdt.cfg.age_months_curve = age_months_curve
 
     for epoch in range(args.start_epoch, args.epochs):
         train_sampler.set_epoch(epoch)

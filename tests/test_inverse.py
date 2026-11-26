@@ -4,9 +4,8 @@ import unittest
 
 import torch
 
-from dvd_scale_free.dvd_scale_free import InverseConfig, make_curriculum
-from dvd_scale_free.dvd_scale_free.endpoint_linear_fast import EndpointLinearTrainingTransform
-from dvd_scale_free.dvd_scale_free.rrc import RRCConfig, training_rrc
+from dvd_scale_free import DVDTrainingTransform, InverseConfig, make_curriculum
+from dvd_scale_free.dvd_scale_free.helpers.rrc import RRCConfig, training_rrc
 from dvd_scale_free.datasets.dataset_loader import SupervisedLearningDataset
 from scripts.main import build_dvd_transformer, describe_dvd, parser
 
@@ -18,7 +17,7 @@ class SpectrumControlsTest(unittest.TestCase):
         cls.x = torch.rand(2, 3, 128, 160, generator=torch.Generator().manual_seed(42))
 
     def test_independent_frequency_and_amplitude_flips(self):
-        self.assertIsInstance(make_curriculum(), EndpointLinearTrainingTransform)
+        self.assertIsInstance(make_curriculum(), DVDTrainingTransform)
         patterns = ((True, False), (False, True), (True, True))
         plots = []
         for f,a in patterns:
