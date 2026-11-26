@@ -27,20 +27,20 @@ Choose a DVD schedule below to span birth to **25 years (300 months)**. The plan
 
 Training starts at 0 months and stops just before the planned end age. To include 300-month inputs, add an epoch without changing the rate (epoch 151 for DVD-B). The forward contrast filter reaches its adult setting at 300 months and stays on.
 
-The example below uses the DVD-B schedule:
+For forward DVD on ImageNet-1K with the default ResNet-50 and DVD-B schedule, the full [paper setup](#paper-training) is the default:
 
 ```sh
-WANDB_MODE=offline torchrun --standalone --nproc-per-node=2 -m scripts.main /data \
+torchrun --standalone --nproc-per-node=2 -m scripts.main \
   --dataset-name imagenet --imagenet-path /data/imagenet \
-  --development-strategy dvd --epochs 150 --months_per_epoch 2
+  --development-strategy dvd --output-dir runs/dvd-b-paper
 ```
 
-To match the original ResNet-50 training setup, use [Paper Training](#paper-training).
+This uses 150 epochs and 2 months per epoch. DVD-S, DVD-P, and custom settings use the general trainer: pass the data directory as a positional argument and leave out `--output-dir`. Use `--training-recipe general` to keep the previous trainer for DVD-B, for example when resuming a general run.
 
 Inspect the resolved settings without loading data or allocating a GPU:
 
 ```sh
-python -m scripts.main --describe-dvd --development-strategy dvd --epochs 150 --months_per_epoch 2
+python -m scripts.main --describe-dvd --dataset-name imagenet --development-strategy dvd
 ```
 
 ### Preview an Age
@@ -96,19 +96,13 @@ The automatic adult anchor is calibrated to 224 pixels over 15 degrees: `0.98 * 
 
 ### Paper Training
 
-Train ResNet-50 on ImageNet-1K with DVD-B timing (150 epochs, 2 months per epoch), the [paper augmentation](dvd_scale_free/datasets/paper_imagenet.py#L87), and no random resized crop. Use the full ImageNet-1K training and validation splits and two CUDA GPUs on one node.
-
-```sh
-torchrun --standalone --nproc-per-node=2 -m scripts.main \
-  --training-recipe paper \
-  --imagenet-path /path/to/imagenet --output-dir runs/dvd-b-paper
-```
+The default DVD-B run above uses the [paper augmentation](dvd_scale_free/datasets/paper_imagenet.py#L87), with no random resized crop. It requires the full ImageNet-1K splits, two CUDA GPUs on one node, and an output directory. Add `--training-recipe paper` to require this setup and reject incompatible options.
 
 The paper setup uses 256 px images, 512 images per GPU and 1,251 steps per epoch. It applies augmentation before DVD, then trains with FP16, synchronized batch normalization, class-weighted cross-entropy, and fused Adam (learning rate `1e-4`, weight decay `1e-6`). The best checkpoint is chosen by top-1 accuracy across all 50,000 unfiltered validation images.
 
 ## AI-Oriented: Steer Model Bias
 
-Use these controls to test whether changing the training visual diet shifts a model's reliance on shape or texture. Skip this section if you only want to model human development. The paper setup does not use these controls.
+Use these controls with the general trainer to test whether the visual diet shifts a model's reliance on shape or texture. Skip this section if you only want to model human development.
 
 ### Change Developmental Speed
 

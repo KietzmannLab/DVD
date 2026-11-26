@@ -25,10 +25,9 @@ from dvd_scale_free.dvd_scale_free.helpers.schedule import generate_age_months_c
 from dvd_scale_free.dvd_scale_free.inverse import REFERENCE_BAND_CPD
 from dvd_scale_free.models.protocol import PAPER_RECIPE, recipe_name
 
-recipe_option = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-recipe_option.add_argument("--training-recipe", type=recipe_name, choices=("general", PAPER_RECIPE), default="general",
-                           help="use the paper's ResNet-50 ImageNet training setup")
-parser = argparse.ArgumentParser(description="Model Training", parents=[recipe_option])
+parser = argparse.ArgumentParser(description="Model Training")
+parser.add_argument("--training-recipe", type=recipe_name, choices=("general", PAPER_RECIPE),
+                    help="defaults to paper for standard ImageNet ResNet-50 DVD-B; otherwise general")
 parser.add_argument("data", metavar="DIR", nargs="?", help="path to dataset")
 parser.add_argument("--dataset-name", default="texture2shape_miniecoset", type=str, help="dataset name")
 parser.add_argument("--imagenet-path", help="ImageNet ImageFolder root containing train/ and val/")
@@ -114,12 +113,30 @@ parser.add_argument("--output-dir", help="run directory for --training-recipe pa
 
 
 def parse_args(argv=None):
-    chosen, _ = recipe_option.parse_known_args(argv)
-    if chosen.training_recipe == PAPER_RECIPE:
-        from dvd_scale_free.models.paper_runner import RECIPE_DEFAULTS
+    args = parser.parse_args(argv)
+    if args.training_recipe == "general":
+        return args
+    if args.training_recipe is None and (args.dataset_name, args.arch, args.development_strategy) != (
+        "imagenet", "resnet50", "dvd"
+    ):
+        args.training_recipe = "general"
+        return args
 
-        return parser.parse_args(argv, namespace=argparse.Namespace(**RECIPE_DEFAULTS))
-    return parser.parse_args(argv)
+    from dvd_scale_free.models import paper_runner
+
+    paper_args = parser.parse_args(
+        argv, namespace=argparse.Namespace(training_recipe=PAPER_RECIPE, **paper_runner.RECIPE_DEFAULTS)
+    )
+    if args.training_recipe == PAPER_RECIPE:
+        return paper_args
+
+    # Check the paper settings without consulting the dataset, checkpoint, or GPU count.
+    try:
+        paper_runner.describe(paper_args, build_dvd_transformer(paper_args))
+    except ValueError:
+        args.training_recipe = "general"
+        return args
+    return paper_args
 
 def setup_logging_and_wandb(args):
     import wandb
@@ -428,7 +445,7 @@ def main():
         if args.training_recipe == PAPER_RECIPE:
             args.dvd_protocol["training_recipe"] = paper_runner.describe(args, dvdt)
         elif args.output_dir is not None:
-            raise ValueError("--output-dir is for --training-recipe paper")
+            raise ValueError("--output-dir is only used by the paper recipe; omit it for general training")
     except ValueError as exc:
         parser.error(str(exc))
     if args.describe_dvd:
@@ -439,9 +456,12 @@ def main():
             parser.error("Paper evaluation requires --resume with a trusted checkpoint")
         if not args.evaluate and not args.output_dir:
             parser.error("Paper training requires --output-dir")
-        return paper_runner.run(args, dvdt, build_age_months_curve)
-    if args.data is None:
+    elif args.data is None:
         parser.error("data is required for training or evaluation")
+    if os.environ.get("RANK", "0") == "0":
+        print(f"Training recipe: {args.training_recipe}", flush=True)
+    if args.training_recipe == PAPER_RECIPE:
+        return paper_runner.run(args, dvdt, build_age_months_curve)
 
     import numpy as np
     import wandb

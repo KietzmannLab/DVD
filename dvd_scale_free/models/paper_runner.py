@@ -19,12 +19,13 @@ from .protocol import PAPER_RECIPE, same_dvd_protocol
 
 
 RECIPE_DEFAULTS = dict(dataset_name="imagenet", development_strategy="dvd", epochs=150,
-                       workers=24, world_size=2, log_freq=50, dvd_backend="batched")
+                       workers=24, world_size=2, log_freq=50, dvd_backend="batched",
+                       apply_color=1, grayscale_aug=1)
 SHARED_IMAGENET = Path("/share/klab/datasets/cached_datasets/imagenet_p004")
 STEPS_PER_EPOCH = 1251
 _FIXED = dict(arch="resnet50", dataset_name="imagenet", image_size=256, batch_size_per_gpu=512,
               optimizer="adam", lr=1e-4, weight_decay=1e-6, lr_scheduler="", warmup_epochs=0,
-              label_smoothing=0.0, world_size=2, epochs=150, months_per_epoch=2.0,
+              label_smoothing=0.0, world_size=2, dist_url="env://", epochs=150, months_per_epoch=2.0,
               time_order="chronological", development_strategy="dvd", apply_blur=1, apply_color=1,
               apply_contrast=1, grayscale_aug=1, blur_aug=1, additional_aug=1, resize_to_224=0,
               resize_to_256=0, rrc=False, crop_min=1.0, pretrained="", start_epoch=0, best_acc1=0.0)

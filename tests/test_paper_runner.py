@@ -108,10 +108,44 @@ class PaperRunnerTests(unittest.TestCase):
         previous = cli("--training-recipe", "p004-paper", "--describe-dvd")
         self.assertEqual(previous.returncode, 0, previous.stderr)
         self.assertEqual(json.loads(previous.stdout), protocol)
+        automatic = cli("--dataset-name", "imagenet", "--development-strategy", "dvd", "--describe-dvd")
+        self.assertEqual(automatic.returncode, 0, automatic.stderr)
+        self.assertEqual(json.loads(automatic.stdout), protocol)
         for bad in (("--apply_contrast", "0"), ("--rrc",), ("--epochs", "300"), ("--wd", "0")):
             result = cli(*args, *bad)
             self.assertEqual(result.returncode, 2)
             self.assertIn("paper recipe requires", result.stderr)
+
+    def test_default_dvd_b_training_dispatches_to_the_paper_runner(self):
+        argv = ["scripts.main", "--dataset-name", "imagenet", "--development-strategy", "dvd",
+                "--epochs", "150", "--months_per_epoch", "2", "--imagenet-path", "/data/imagenet",
+                "--output-dir", "runs/dvd-b-paper"]
+        with patch.object(sys, "argv", argv), patch.object(paper, "run") as run:
+            main.main()
+        run.assert_called_once()
+        args, transform, build_ages = run.call_args.args
+        self.assertEqual(args.training_recipe, "paper")
+        self.assertEqual((args.world_size, args.workers, args.dvd_backend), (2, 24, "batched"))
+        self.assertEqual((args.weight_decay, args.epochs, args.months_per_epoch), (1e-6, 150, 2))
+        self.assertEqual(args.output_dir, "runs/dvd-b-paper")
+        self.assertTrue(transform.config.apply_contrast)
+        self.assertIs(build_ages, main.build_age_months_curve)
+
+    def test_other_training_configs_keep_the_general_runner(self):
+        dvd_b = ["--dataset-name", "imagenet", "--development-strategy", "dvd"]
+        variants = (
+            ["--epochs", "300", "--months_per_epoch", "1"], ["--epochs", "75", "--months_per_epoch", "4"],
+            ["--dvd-speed", "0.5"], ["--invert-frequency"], ["--rrc"], ["--dvd-fov-deg", "20"],
+            ["--optimizer", "adamw"], ["--class-weights-json-path", "weights.json", "--dataset-name", "ecoset_square256"],
+            ["--development-strategy", "adult"], ["--arch", "swin_t"], ["--training-recipe", "general"],
+            ["--dist_url", "tcp://127.0.0.1:12345"],
+        )
+        for flags in ([], ["--development-strategy", "dvd"], *(dvd_b + variant for variant in variants)):
+            with self.subTest(flags=flags):
+                args = main.parse_args(flags)
+                self.assertEqual(args.training_recipe, "general")
+                self.assertEqual((args.world_size, args.workers, args.dvd_backend), (1, 10, "auto"))
+        self.assertEqual(main.parse_args(dvd_b + variants[1]).epochs, 75)
 
     def test_paper_batch_prefix_and_random_draws(self):
         args = paper_args()
