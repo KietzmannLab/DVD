@@ -10,7 +10,7 @@ from torch.nn.functional import interpolate
 
 from dvd_scale_free.dvd_scale_free.inverse_endpoint_linear import REFERENCE_BAND_CPD, InverseConfig, InverseEndpointDVD
 from dvd_scale_free.dvd_scale_free._cli import adult_anchor, infant_anchor
-from dvd_scale_free.dvd_scale_free.endpoint_linear import EndpointConfig, EndpointLinearDVD
+from dvd_scale_free.dvd_scale_free.endpoint_linear import SPEED_COMPONENTS, EndpointConfig, EndpointLinearDVD
 
 
 def image_size(value):
@@ -27,7 +27,9 @@ def main():
     parser.add_argument("output", type=Path, help="destination PNG")
     parser.add_argument("--months", type=float, default=48, help="age in months (default: 48)")
     parser.add_argument("--speed", type=float, default=1.,
-                        help="contrast speed V: >1 matures sooner, <1 matures later (default: 1)")
+                        help="developmental speed V: >1 advances selected curves, <1 delays them (default: 1)")
+    parser.add_argument("--speed-components", nargs="*", choices=SPEED_COMPONENTS, default=SPEED_COMPONENTS,
+                        help="curves affected by V (default: all three; omit values to leave every curve at V=1)")
     parser.add_argument("--fov-deg", type=float, default=15., help="horizontal visual angle")
     parser.add_argument("--vertical-fov-deg", type=float, help="default: infer from source aspect ratio")
     parser.add_argument("--infant-anchor-cpd", type=infant_anchor, default=.23,
@@ -62,8 +64,8 @@ def main():
         x = x.to(args.device, dtype=torch.float32).div_(255)
         flipped = args.invert_frequency or args.invert_amplitude
         color = not flipped if args.dvd_color is None else args.dvd_color
-        common = dict(speed=args.speed, fov_deg=args.fov_deg, vertical_fov_deg=args.vertical_fov_deg,
-                      apply_color=color)
+        common = dict(speed=args.speed, speed_components=args.speed_components,
+                      fov_deg=args.fov_deg, vertical_fov_deg=args.vertical_fov_deg, apply_color=color)
         cfg = EndpointConfig(
             **common, infant_anchor_cpd=args.infant_anchor_cpd, adult_anchor_cpd=args.adult_anchor_cpd,
             sigmoid_width_log10=args.sigmoid_width_log10, image_size=args.image_size,

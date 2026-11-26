@@ -42,16 +42,29 @@ python tests/dvd_images_demo.py --dvd-method legacy --output legacy_gallery.pdf
 ## Endpoint Linear Settings
 
 1. **Acuity:** A reflected Gaussian filter is evaluated in angular frequency units (cycles per degree, cpd).
-2. **Contrast:** The luminance spectrum after acuity filtering gives two radial contrast-amplitude anchors. The threshold interpolates linearly between the two amplitudes using `p = H(age) ** (1 / V)`, where the human Hill fit `H` is normalized at 300 months. A log-amplitude sigmoid attenuates frequencies below the threshold while preserving DC.
+2. **Contrast:** The luminance spectrum after acuity filtering gives two radial contrast-amplitude anchors. The threshold interpolates linearly between their amplitudes according to contrast maturation. A log-amplitude sigmoid attenuates frequencies below the threshold while preserving DC.
 3. **Color:** The original DVD age-dependent grayscale-to-RGB blend is applied after the spatial stages.
 
 | Setting | Default and meaning |
 | :--- | :--- |
-| `speed` (V) | `1.0` follows the human contrast curve. Larger positive values advance contrast maturation at a given age; smaller positive values slow it. V does not change the acuity or color curves. |
+| `speed` (V) | `1.0` uses the original acuity, contrast, and color fits. `V > 1` moves the selected curves to a later developmental age; `0 < V < 1` moves them to an earlier age. |
+| `speed_components` | `("acuity", "contrast", "color")` by default. Select any subset, or use `()` to leave all timing unchanged. Unselected stages still develop at their original rate; `apply_acuity`, `apply_contrast`, and `apply_color` separately control whether a stage runs. |
 | `fov_deg`, `vertical_fov_deg` | Horizontal visual angle is 15 degrees; by default, vertical angle follows the source aspect ratio. |
 | `infant_anchor_cpd` | `0.23` cpd; `"fundamental"` uses the lowest nonzero sampled frequency. |
 | `adult_anchor_cpd` | `None` (auto): `0.98 * 224 / (2 * 15)` cpd (about 7.3173), capped at 98% of the smaller axis Nyquist frequency. To override, pass a number or `"nyquist"` to use the actual grid's capped Nyquist frequency. |
 | `sigmoid_width_log10` | `0.10` log10 amplitude units. |
+
+The shared clock uses the original contrast-speed rule: `p = H(t) ** (1 / V)`, where the human contrast Hill fit `H` is normalized at 300 months. Selected acuity and color curves are evaluated at the equivalent age `inverse_H(p)`; selected contrast uses `p` directly. This changes timing, not the fitted curves or the birth and 300-month endpoints. Retiming acuity can also change the image spectrum used to compute the contrast threshold, even when contrast timing is held fixed.
+
+To reproduce the previous contrast-only behavior at a non-unit V:
+
+```python
+contrast_only = EndpointLinearDVD(EndpointConfig(speed=0.5, speed_components=("contrast",)))
+```
+
+```sh
+python -m scripts.dvd_image input.jpg slower_contrast.png --months 48 --speed 0.5 --speed-components contrast
+```
 
 The adult contrast endpoint is still filtered. The demo-only `--unfiltered-at-300` returns the prepared input unchanged at 300 months and later; do not use it to reproduce training. The browser's slider limits are not training constraints.
 
@@ -75,7 +88,7 @@ crop = training_rrc(256, RRCConfig(enabled=True, scale=(0.08, 1.0)))
 aged = dvd(crop(x) if crop is not None else x, months=24)
 ```
 
-The original forward transform is unchanged: its frequency line is the Gaussian half-gain and its amplitude gate acts on radial means. The flipped controls instead use calibrated Fourier coefficients on the even-reflected field, with two soft gates. Both flips match the full-color 256 px inverse-DVD filter from the steering experiments. Flipped modes are full-color by default and return the input unchanged at 300 months. Random grayscale is also off by default for flipped modes in the training CLI.
+At V=1, the original forward transform is unchanged: its frequency line is the Gaussian half-gain and its amplitude gate acts on radial means. The flipped controls instead use calibrated Fourier coefficients on the even-reflected field, with two soft gates. For flips, `acuity` retimes the frequency gate and `contrast` retimes the amplitude gate. To preserve the previous flipped-mode behavior, select `("acuity", "contrast")`. Both flips at V=1 match the full-color 256 px inverse-DVD filter from the steering experiments. Flipped modes are full-color by default and return the input unchanged at 300 months. Random grayscale is also off by default for flipped modes in the training CLI.
 
 ```sh
 python -m scripts.main --describe-dvd --development_strategy dvd \
@@ -117,8 +130,9 @@ WANDB_MODE=offline torchrun --standalone --nproc-per-node=2 -m scripts.main /dat
 ```
 
 - Use `--dvd-method legacy` for the original scale-free CLI. For example, `--cs_logspan_start 0.005` selects the legacy remapping parameter. The legacy CLI defaults to enabling the optional Barten CSF; add `--contrast_use_barten_csf 0` to match the legacy Python API defaults.
+- To retime only contrast, use `--endpoint-speed 0.5 --endpoint-speed-components contrast`. To retime multiple curves, list them after the flag (e.g., `acuity contrast`).
 - The new training transform uses chunked, batched real FFTs for square float32 RGB or single-channel batches at least 224 px with default geometry and both spatial stages enabled. Other settings or diagnostic requests use the reference path, which can be slower. `--endpoint-backend batched` checks that the training input can use the accelerated path; `--endpoint-chunk-size` controls its temporary memory.
-- Validation uses adult (unfiltered) inputs. Endpoint Linear checkpoints record the filter and schedule; resume with matching options. Use a separate working directory for independent runs.
+- Validation uses adult (unfiltered) inputs. Endpoint Linear checkpoints record the filter, schedule, and selected speed components; resume with matching options. To resume an older checkpoint, pass its path with `--resume` and use equivalent timing: V=1, the previous contrast-only timing for forward mode, or both spectral gates for flipped modes. Use a separate working directory for independent runs.
 
 ### Replaying an Existing Experiment
 

@@ -11,7 +11,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from functools import lru_cache
 import math
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import torch
 from torch import Tensor, nn
@@ -22,13 +22,17 @@ ADULT_AGE_MONTHS = 300.0
 ADULT_NYQUIST_FRACTION = 0.98
 REFERENCE_ADULT_CPD = ADULT_NYQUIST_FRACTION * 224 / (2 * 15)
 AMPLITUDE_FLOOR = 1e-16
+SPEED_COMPONENTS = ("acuity", "contrast", "color")
+SpeedComponent = Literal["acuity", "contrast", "color"]
+_CONTRAST_MIDPOINT = 4.8 * 12.0
+_CONTRAST_EXPONENT = 2.1633375920569247
 
 
 @dataclass(frozen=True)
 class EndpointConfig:
     """Angles are in degrees, spatial-frequency anchors in cycles/degree."""
 
-    speed: float = 1.0  # Larger values advance contrast maturation; smaller values slow it.
+    speed: float = 1.0  # Larger values advance selected curves; smaller values delay them.
     fov_deg: float = 15.0
     vertical_fov_deg: float | None = None
     infant_anchor_cpd: float | Literal["fundamental"] = 0.23
@@ -42,10 +46,12 @@ class EndpointConfig:
     clamp_output: bool = True
     low_frequency_policy: Literal["extrapolate", "clamp"] = "extrapolate"
     adult_out_of_band: Literal["clamp", "error"] = "clamp"
+    speed_components: tuple[SpeedComponent, ...] = SPEED_COMPONENTS
 
     def __post_init__(self):
         if not math.isfinite(self.speed) or self.speed <= 0:
             raise ValueError("speed (V) must be finite and positive")
+        object.__setattr__(self, "speed_components", _speed_components(self.speed_components))
         for value, name in (
             (self.fov_deg, "fov_deg"), (self.vertical_fov_deg, "vertical_fov_deg"),
             (self.infant_anchor_cpd, "infant_anchor_cpd"),
@@ -79,16 +85,47 @@ def _age(months: float) -> float:
     return value
 
 
+def _contrast_hill(t):
+    if t < 1e-100:
+        power = (t / _CONTRAST_MIDPOINT) ** _CONTRAST_EXPONENT
+        return power / (1.0 + power)
+    return 1.0 / (1.0 + (_CONTRAST_MIDPOINT / t) ** _CONTRAST_EXPONENT)
+
+
+_ADULT_CONTRAST = _contrast_hill(ADULT_AGE_MONTHS)
+
+
 def contrast_sensitivity(months: float) -> float:
     """The original DVD Hill fit, normalized and capped at 300 months."""
-    def hill(t):
-        midpoint, exponent = 4.8 * 12.0, 2.1633375920569247
-        if t < 1e-100:
-            power = (t / midpoint) ** exponent
-            return power / (1.0 + power)
-        return 1.0 / (1.0 + (midpoint / t) ** exponent)
+    return _contrast_hill(min(_age(months), ADULT_AGE_MONTHS)) / _ADULT_CONTRAST
 
-    return hill(min(_age(months), ADULT_AGE_MONTHS)) / hill(ADULT_AGE_MONTHS)
+
+def _speed_components(values):
+    if (not isinstance(values, (list, tuple)) or any(not isinstance(v, str) or v not in SPEED_COMPONENTS for v in values)
+            or len(set(values)) != len(values)):
+        raise ValueError("speed_components must be a list or tuple of distinct acuity, contrast, or color values")
+    return tuple(v for v in SPEED_COMPONENTS if v in values)
+
+
+class _Timing(NamedTuple):
+    acuity_months: float
+    color_months: float
+    frequency_progress: float
+    contrast_progress: float
+
+
+def _stage_timing(months, speed, components):
+    base = contrast_sensitivity(months)
+    progress = base ** (1 / speed) if speed != 1 and components else base
+    effective = months
+    if speed != 1 and 0 < months < ADULT_AGE_MONTHS and ("acuity" in components or "color" in components):
+        # Invert the same Hill fit used for legacy contrast speed, without refitting the other curves.
+        q = progress * _ADULT_CONTRAST
+        effective = min(ADULT_AGE_MONTHS, _CONTRAST_MIDPOINT * (q / (1 - q)) ** (1 / _CONTRAST_EXPONENT))
+    return _Timing(effective if "acuity" in components else months,
+                   effective if "color" in components else months,
+                   progress if "acuity" in components else base,
+                   progress if "contrast" in components else base)
 
 
 def acuity_sigma_degrees(months: float) -> float:
@@ -272,10 +309,15 @@ class EndpointLinearDVD(nn.Module):
             raise ValueError("Resizing would make the short edge smaller than 16 pixels")
         output_hw = source_hw if size is None else size
         geometry = self._geometry(source_hw, output_hw)
-        p = contrast_sensitivity(months)**(1 / cfg.speed)
-        sigma = acuity_sigma_degrees(months)
-        meta = dict(geometry, age_months=months, contrast_speed=cfg.speed, contrast_progress=p,
-                    gaussian_sigma_deg=sigma, unfiltered=False)
+        timing = _stage_timing(months, cfg.speed, cfg.speed_components)
+        sigma = acuity_sigma_degrees(timing.acuity_months)
+        has_color = cfg.apply_color and x.shape[1] in (3, 4)
+        color_weight = paper_color_weight(timing.color_months) if has_color else 1.0
+        meta = dict(geometry, age_months=months, speed=cfg.speed, speed_components=cfg.speed_components,
+                    acuity_age_months=timing.acuity_months, color_age_months=timing.color_months,
+                    contrast_speed=cfg.speed if "contrast" in cfg.speed_components else 1.0,
+                    contrast_progress=timing.contrast_progress, gaussian_sigma_deg=sigma,
+                    color_weight=color_weight, unfiltered=False)
         original_dtype = x.dtype
         if output_hw != source_hw:
             x = x.float() if original_dtype in (torch.float16, torch.bfloat16) else x
@@ -289,12 +331,11 @@ class EndpointLinearDVD(nn.Module):
         if cfg.apply_acuity:
             x = _blur(x, sigma, geometry["horizontal_fov_deg"], geometry["vertical_fov_deg"])
         if cfg.apply_contrast:
-            x, diag = self._contrast(x, geometry, p)
+            x, diag = self._contrast(x, geometry, timing.contrast_progress)
         else:
             diag = [dict(contrast_threshold=None) for _ in x]
-        if cfg.apply_color and x.shape[1] == 3:
-            weight = paper_color_weight(months)
-            x = weight*x + (1-weight)*_luminance(x)
+        if has_color:
+            x = color_weight*x + (1-color_weight)*_luminance(x)
         if cfg.clamp_output:
             x = x.clamp(0, 1)
         if alpha is not None:

@@ -8,7 +8,7 @@ import math
 import torch
 from torch import nn
 
-from .endpoint_linear import _age, _luminance, contrast_sensitivity, paper_color_weight
+from .endpoint_linear import SPEED_COMPONENTS, SpeedComponent, _age, _luminance, _speed_components, _stage_timing, paper_color_weight
 
 
 REFERENCE_BAND_CPD = .98 * 256 / 30
@@ -18,7 +18,7 @@ REFERENCE_BAND_CPD = .98 * 256 / 30
 class InverseConfig:
     invert_frequency: bool = True
     invert_amplitude: bool = True
-    speed: float = 1.0  # V > 1 releases the spectrum sooner; V < 1 releases it later.
+    speed: float = 1.0  # V > 1 advances selected stages; V < 1 delays them.
     fov_deg: float = 15.
     vertical_fov_deg: float | None = None
     birth_frequency_cpd: float = 2.
@@ -31,6 +31,7 @@ class InverseConfig:
     apply_amplitude: bool = True
     apply_color: bool = False
     chunk_size: int = 32
+    speed_components: tuple[SpeedComponent, ...] = SPEED_COMPONENTS
 
     def __post_init__(self):
         if not (self.invert_frequency or self.invert_amplitude):
@@ -47,6 +48,7 @@ class InverseConfig:
             raise ValueError("Birth frequency must be below the calibration band limit")
         if type(self.chunk_size) is not int or self.chunk_size < 1:
             raise ValueError("chunk_size must be a positive integer")
+        object.__setattr__(self, "speed_components", _speed_components(self.speed_components))
 
 
 def _smooth(z):
@@ -105,11 +107,15 @@ class InverseEndpointDVD(nn.Module):
         fov_y = cfg.vertical_fov_deg if cfg.vertical_fov_deg is not None else fov_x*h/w
         nyq = .98 * min(w/(2*fov_x), h/(2*fov_y))
         ceiling = nyq if cfg.band_limit_cpd is None else min(nyq, cfg.band_limit_cpd)
-        p = contrast_sensitivity(age)**(1/cfg.speed)
+        timing = _stage_timing(age, cfg.speed, cfg.speed_components)
+        pf, p = timing.frequency_progress, timing.contrast_progress
         open_freq = math.sqrt(2)*ceiling/(.98*(1-cfg.taper))
-        f = (cfg.birth_frequency_cpd*(1-p) if cfg.invert_frequency
-             else (1-p)*cfg.birth_frequency_cpd + p*open_freq)
-        diagnostics = dict(age_months=age, contrast_progress=p, band_limit_cpd=ceiling,
+        f = (cfg.birth_frequency_cpd*(1-pf) if cfg.invert_frequency
+             else (1-pf)*cfg.birth_frequency_cpd + pf*open_freq)
+        alpha = min(1., paper_color_weight(timing.color_months)) if cfg.apply_color and x.shape[1] in (3, 4) else 1.
+        diagnostics = dict(age_months=age, speed=cfg.speed, speed_components=cfg.speed_components,
+                           frequency_progress=pf, contrast_progress=p, color_age_months=timing.color_months,
+                           color_weight=alpha, band_limit_cpd=ceiling,
                            frequency_boundary_cpd=f, frequency_floor=cfg.invert_frequency,
                            amplitude_ceiling=cfg.invert_amplitude, unfiltered=age >= 300)
         if age >= 300:
@@ -158,7 +164,6 @@ class InverseEndpointDVD(nn.Module):
                 gain[:, 0, 0] = 1
                 restored = torch.fft.irfft2(coeff.mul_(gain[:, None]), s=(2*h, 2*w))[..., :h, :w]
                 if cfg.apply_color and data.shape[1] == 3:
-                    alpha = min(1., paper_color_weight(age))
                     restored = (1-alpha)*_luminance(restored) + alpha*restored
                 out[:, :3].copy_(restored.clamp_(0, 1))
                 if raw.shape[1] == 4:

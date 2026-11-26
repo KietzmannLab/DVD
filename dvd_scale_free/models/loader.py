@@ -258,6 +258,27 @@ def sync_resume_state(args):
     args.best_acc1 = float(best_acc1_tensor.item())
 
 
+def _same_dvd_protocol(saved, current):
+    if saved == current:
+        return True
+    if not (isinstance(saved, dict) and current.get("method") == "endpoint-linear"
+            and current.get("version") == 2 and saved.get("version") == 1):
+        return False
+    config = current["config"].copy()
+    components = set(config.pop("speed_components"))
+    if saved != dict(current, version=1, config=config):
+        return False
+    if config["speed"] == 1:
+        return True
+    # Version 1 sped up contrast alone in forward mode and both spectral gates in flipped modes.
+    flipped = current["backend"] == "reflected-batched"
+    old_components = {"acuity", "contrast"} if flipped else {"contrast"}
+    active = {name for name, key in (("acuity", "apply_frequency" if flipped else "apply_acuity"),
+                                    ("contrast", "apply_amplitude" if flipped else "apply_contrast"),
+                                    ("color", "apply_color")) if config[key]}
+    return (active & components) == (active & old_components)
+
+
 def _load_resume_checkpoint(path, args):
     loc = f"cuda:{args.gpu}" if args.gpu is not None else "cpu"
     # A trusted training checkpoint includes Python and NumPy RNG states.
@@ -265,7 +286,7 @@ def _load_resume_checkpoint(path, args):
     current = getattr(args, "dvd_protocol", None)
     saved = checkpoint.get("dvd_protocol")
     if current and not getattr(args, "evaluate", False):
-        if saved != current and (saved is not None or current["method"] == "endpoint-linear" or current.get("rrc")):
+        if not _same_dvd_protocol(saved, current) and (saved is not None or current["method"] == "endpoint-linear" or current.get("rrc")):
             raise ValueError("DVD protocol differs or is missing; resume with the matching trainer and settings")
     return checkpoint
 

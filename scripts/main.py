@@ -19,7 +19,7 @@ import torch.utils.data
 import torch.utils.data.distributed
 
 from dvd_scale_free.dvd_scale_free._cli import adult_anchor, infant_anchor
-from dvd_scale_free.dvd_scale_free.endpoint_linear import EndpointConfig
+from dvd_scale_free.dvd_scale_free.endpoint_linear import SPEED_COMPONENTS, EndpointConfig
 from dvd_scale_free.dvd_scale_free.endpoint_linear_fast import EndpointLinearTrainingTransform
 from dvd_scale_free.dvd_scale_free.inverse_endpoint_linear import (
     REFERENCE_BAND_CPD, InverseConfig, InverseEndpointDVD,
@@ -72,7 +72,9 @@ parser.add_argument("--contrast_soft_tau_log10", "--dvd-sigmoid-width-log10", ty
 
 endpoint = parser.add_argument_group("Endpoint Linear DVD options")
 endpoint.add_argument("--endpoint-speed", type=float, default=1.0,
-                      help="contrast speed V: >1 matures sooner, <1 matures later (default: 1)")
+                      help="developmental speed V: >1 advances selected curves, <1 delays them (default: 1)")
+endpoint.add_argument("--endpoint-speed-components", nargs="*", choices=SPEED_COMPONENTS, default=SPEED_COMPONENTS,
+                      help="curves affected by V (default: all three; omit values to leave every curve at V=1)")
 endpoint.add_argument("--endpoint-infant-cpd", type=infant_anchor, default=0.23,
                       help="infant anchor, as cpd or 'fundamental' (default: 0.23)")
 endpoint.add_argument("--endpoint-adult-cpd", type=adult_anchor, default=None,
@@ -283,7 +285,7 @@ def build_dvd_transformer(args, age_months_curve: Optional[List[float]] = None):
             return InverseEndpointDVD(InverseConfig(
                 invert_frequency=args.invert_frequency,
                 invert_amplitude=args.invert_amplitude,
-                speed=args.endpoint_speed, fov_deg=args.contrast_fov_deg,
+                speed=args.endpoint_speed, speed_components=args.endpoint_speed_components, fov_deg=args.contrast_fov_deg,
                 vertical_fov_deg=args.endpoint_vertical_fov_deg,
                 birth_frequency_cpd=args.inverse_birth_cpd, amplitude_quantile=args.inverse_quantile,
                 taper=args.inverse_taper, chunk_size=args.inverse_chunk_size,
@@ -294,6 +296,7 @@ def build_dvd_transformer(args, age_months_curve: Optional[List[float]] = None):
         return EndpointLinearTrainingTransform(
             EndpointConfig(
                 speed=args.endpoint_speed,
+                speed_components=args.endpoint_speed_components,
                 fov_deg=args.contrast_fov_deg,
                 vertical_fov_deg=args.endpoint_vertical_fov_deg,
                 infant_anchor_cpd=args.endpoint_infant_cpd,
@@ -363,10 +366,10 @@ def describe_dvd(args, transformer):
         **augmentation,
     }
     if isinstance(transformer, InverseEndpointDVD):
-        protocol.update(version=1, config=asdict(transformer.config), backend="reflected-batched",
+        protocol.update(version=2, config=asdict(transformer.config), backend="reflected-batched",
                         grayscale_aug=0 if args.grayscale_aug is None else args.grayscale_aug)
     elif args.dvd_method == "endpoint-linear":
-        protocol.update(version=1, config=asdict(transformer.config),
+        protocol.update(version=2, config=asdict(transformer.config),
                         backend=transformer.backend, chunk_size=transformer.chunk)
     else:
         protocol["config"] = {

@@ -45,6 +45,21 @@ class SpectrumControlsTest(unittest.TestCase):
         self.assertGreater(native(torch.rand(1, 384, 384), 5, return_diagnostics=True)[1][0]["band_limit_cpd"],
                            rows[2]["band_limit_cpd"])
 
+    def test_speed_can_move_each_flipped_stage_separately(self):
+        def read(**cfg):
+            transform = make_curriculum(invert_frequency=True, invert_amplitude=True, apply_color=True, **cfg)
+            return transform(self.x, 32, return_diagnostics=True)[1][0]
+
+        base, full = read(), read(speed=2.)
+        for component, key in (("acuity", "frequency_boundary_cpd"), ("contrast", "amplitude_boundary"),
+                               ("color", "color_weight")):
+            row = read(speed=2., speed_components=(component,))
+            self.assertNotEqual(base[key], full[key])
+            self.assertEqual(row[key], full[key])
+            for other in ("frequency_boundary_cpd", "amplitude_boundary", "color_weight"):
+                if other != key:
+                    self.assertEqual(row[other], base[other])
+
     def test_alpha_and_exposure_are_preserved(self):
         dvd = make_curriculum(invert_amplitude=True)
         rgba = torch.cat((self.x, self.x[:, :1]), dim=1)

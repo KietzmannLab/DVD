@@ -15,7 +15,7 @@ from torch import nn
 from dvd_scale_free import utils
 from dvd_scale_free.datasets.dataset_loader import SupervisedLearningDataset
 from dvd_scale_free.dvd_scale_free.development import DVDConfig, DVDTransformer
-from dvd_scale_free.models.loader import _load_resume_checkpoint
+from dvd_scale_free.models.loader import _load_resume_checkpoint, _same_dvd_protocol
 from scripts import main
 
 
@@ -38,8 +38,30 @@ class DVDCommandTests(unittest.TestCase):
         protocol = json.loads(latest.stdout)
         self.assertEqual(protocol["method"], "endpoint-linear")
         self.assertEqual(protocol["config"]["speed"], 1)
+        self.assertEqual(protocol["config"]["speed_components"], ["acuity", "contrast", "color"])
         self.assertIsNone(protocol["config"]["adult_anchor_cpd"])
         self.assertFalse(protocol["config"]["unfiltered_at_300"])
+
+    def test_cli_speed_components_and_v1_checkpoint_compatibility(self):
+        def describe(flags):
+            args = main.parser.parse_args(["--development_strategy", "dvd", *flags])
+            return main.describe_dvd(args, main.build_dvd_transformer(args))
+
+        def old(protocol):
+            return dict(protocol, version=1, config={k: v for k, v in protocol["config"].items()
+                                                     if k != "speed_components"})
+
+        default = describe([])
+        self.assertTrue(_same_dvd_protocol(old(default), default))
+        speed = ["--endpoint-speed", ".5"]
+        selective = describe([*speed, "--endpoint-speed-components", "contrast"])
+        self.assertEqual(selective["config"]["speed_components"], ("contrast",))
+        self.assertTrue(_same_dvd_protocol(old(selective), selective))
+        self.assertFalse(_same_dvd_protocol(old(selective), describe(speed)))
+        flipped = describe([*speed, "--invert-frequency", "--invert-amplitude"])
+        self.assertTrue(_same_dvd_protocol(old(flipped), flipped))
+        flipped_color = describe([*speed, "--invert-frequency", "--apply_color", "1"])
+        self.assertFalse(_same_dvd_protocol(old(flipped_color), flipped_color))
 
     def test_legacy_cli_reproduces_original_api_with_matching_flags(self):
         args = main.parser.parse_args(["--development_strategy", "dvd", "--dvd-method", "legacy",
@@ -56,10 +78,12 @@ class DVDCommandTests(unittest.TestCase):
             image = Image.new("RGB", (96, 64), color=(128, 112, 94))
             image.save(src)
             r = command("-m", "scripts.dvd_image", str(src), str(dst), "--months", "300",
-                        "--adult-anchor-cpd", "auto", "--unfiltered-at-300")
+                        "--adult-anchor-cpd", "auto", "--unfiltered-at-300", "--speed", "2",
+                        "--speed-components", "color")
             meta = json.loads(r.stdout)
             self.assertTrue(meta["unfiltered"])
             self.assertTrue(meta["adult_anchor_clamped"])
+            self.assertEqual(meta["speed_components"], ["color"])
             with Image.open(dst) as actual:
                 self.assertEqual(actual.size, image.size)
                 self.assertEqual(actual.tobytes(), image.tobytes())

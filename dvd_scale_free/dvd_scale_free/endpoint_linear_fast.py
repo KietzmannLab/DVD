@@ -9,7 +9,7 @@ import torch
 
 from .endpoint_linear import (
     AMPLITUDE_FLOOR, EndpointConfig, EndpointLinearDVD, _age, _blur, _grid, _luminance,
-    acuity_sigma_degrees, contrast_sensitivity, paper_color_weight,
+    _stage_timing, acuity_sigma_degrees, paper_color_weight,
 )
 
 
@@ -57,11 +57,9 @@ def supports_batched(config):
 
 
 @torch.no_grad()
-def _filter_spatial(images, months, speed, chunk):
+def _filter_spatial(images, sigma, progress, chunk):
     side = images.shape[-1]
     basis = _basis(side, images.device)
-    progress = contrast_sensitivity(months)**(1/speed)
-    sigma = acuity_sigma_degrees(months)
     floor = AMPLITUDE_FLOOR
     out = torch.empty_like(images, memory_format=torch.contiguous_format)
     for start in range(0, len(images), chunk):
@@ -112,10 +110,10 @@ class EndpointLinearTrainingTransform(EndpointLinearDVD):
     def forward(self, image, months, *, return_diagnostics=False):
         if return_diagnostics or self.backend_for(image) == "reference":
             return super().forward(image, months, return_diagnostics=return_diagnostics)
-        months = _age(months)
+        timing = _stage_timing(_age(months), self.config.speed, self.config.speed_components)
         with torch.autocast(image.device.type, enabled=False):
-            out = _filter_spatial(image, months, self.config.speed, self.chunk)
+            out = _filter_spatial(image, acuity_sigma_degrees(timing.acuity_months), timing.contrast_progress, self.chunk)
             if self.config.apply_color and out.shape[1] == 3:
-                a = paper_color_weight(months)
+                a = paper_color_weight(timing.color_months)
                 out = a*out + (1-a)*_luminance(out)
             return out.clamp_(0,1) if self.config.clamp_output else out
