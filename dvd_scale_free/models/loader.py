@@ -258,6 +258,18 @@ def sync_resume_state(args):
     args.best_acc1 = float(best_acc1_tensor.item())
 
 
+def _load_resume_checkpoint(path, args):
+    loc = f"cuda:{args.gpu}" if args.gpu is not None else "cpu"
+    # A trusted training checkpoint includes Python and NumPy RNG states.
+    checkpoint = torch.load(path, map_location=loc, weights_only=False)
+    current = getattr(args, "dvd_protocol", None)
+    saved = checkpoint.get("dvd_protocol")
+    if current and not getattr(args, "evaluate", False):
+        if saved != current and (saved is not None or current["method"] == "endpoint-linear"):
+            raise ValueError("DVD protocol differs or is missing; resume with the matching trainer and settings")
+    return checkpoint
+
+
 def resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir):
     """
     Resume from checkpoint if possible.
@@ -268,8 +280,7 @@ def resume_checkpoint_if_any(args, model, optimizer, scaler, logger, log_dir):
             if logger is not None:
                 logger.info("Loading checkpoint '{}'".format(args.resume))
 
-            loc = f"cuda:{args.gpu}" if args.gpu is not None else "cpu"
-            checkpoint = torch.load(args.resume, map_location=loc)
+            checkpoint = _load_resume_checkpoint(args.resume, args)
 
             state_dict = checkpoint.get("state_dict", checkpoint)
             try:
@@ -416,8 +427,7 @@ def resume_latest_checkpoint(args, model, optimizer, scaler, logger, log_dir):
     if logger is not None:
         logger.info(f"Loading checkpoint from '{checkpoint_path}' ...")
 
-    loc = f"cuda:{args.gpu}" if args.gpu is not None else "cpu"
-    checkpoint = torch.load(checkpoint_path, map_location=loc)
+    checkpoint = _load_resume_checkpoint(checkpoint_path, args)
 
     state_dict = checkpoint.get("state_dict", checkpoint)
     try:

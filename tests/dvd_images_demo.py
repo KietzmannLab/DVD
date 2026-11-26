@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-debug_dvd_demo.py
-~~~~~~~~~~~~~~~~~
-Visualize how RGB images change across developmental ages (months)
-using the current Scale-Free DVDTransformer implementation.
-
-Run:
-    python debug_dvd_demo.py
+Visualize RGB images across developmental ages. Use --dvd-method legacy
+to generate the original scale-free DVD gallery.
 """
 
+import argparse
 from pathlib import Path
 from typing import List
 
@@ -18,7 +14,7 @@ import numpy as np
 from PIL import Image
 import torch
 
-from dvd_scale_free.dvd_scale_free.development import DVDTransformer, DVDConfig
+from dvd_scale_free.dvd_scale_free.endpoint_linear import EndpointLinearDVD
 
 
 # ------------------------------------------------------------
@@ -26,9 +22,8 @@ from dvd_scale_free.dvd_scale_free.development import DVDTransformer, DVDConfig
 # ------------------------------------------------------------
 AGES: List[int] = [1, 4, 16, 64, 256]
 IMG_SIZE: int = 256
-USE_GPU: bool = True
 
-CFG = DVDConfig(
+LEGACY_SETTINGS = dict(
     # Global switches
     apply_blur=1,
     apply_color=1,
@@ -94,21 +89,13 @@ CFG = DVDConfig(
 # ------------------------------------------------------------
 # Input / output paths
 # ------------------------------------------------------------
-ASSETS_DIR = Path("assets/example_stimuli")
+ASSETS_DIR = Path(__file__).resolve().parents[1] / "assets/example_stimuli"
 RGB_PATHS: List[Path] = [
     ASSETS_DIR / "example_1.jpeg",
     ASSETS_DIR / "example_2.jpeg",
 ]
 
 OUT_DIR = Path("results/dvd_demo_output")
-OUT_PATH = OUT_DIR / (
-    f"rgb_dvd_demo_"
-    f"{CFG.blur_mode}_"
-    f"b{CFG.apply_blur}_c{CFG.apply_color}_cs{CFG.apply_contrast}_"
-    f"mode_{CFG.decomposition_mode}_clamp{int(CFG.decomposition_clamp)}_color_decomp{CFG.color_decomposition_mode}"
-    f"cslog{CFG.cs_logspan_start:g}_"
-    f"size{CFG.image_size}.pdf"
-)
 
 
 # ------------------------------------------------------------
@@ -136,15 +123,18 @@ def _vis_rgb(img_b3hw: torch.Tensor) -> np.ndarray:
 # Main
 # ------------------------------------------------------------
 @torch.no_grad()
-def make_demo(outfile: Path) -> None:
-    device = torch.device("cuda" if (USE_GPU and torch.cuda.is_available()) else "cpu")
-    dvdt = DVDTransformer(CFG)
+def make_demo(outfile: Path, method: str, device: str) -> None:
+    if method == "legacy":
+        from dvd_scale_free.dvd_scale_free.development import DVDConfig, DVDTransformer
 
-    if CFG.decomposition_mode == "both":
-        raise ValueError(
-            'debug_dvd_demo.py expects a single image tensor output. '
-            'Set decomposition_mode to "keep" or "remove", not "both".'
-        )
+        cfg = DVDConfig(**LEGACY_SETTINGS)
+        dvdt = DVDTransformer(cfg)
+        caption = f"Legacy scale-free DVD | {cfg.blur_mode} blur | cs_logspan_start={cfg.cs_logspan_start:g}"
+        if cfg.decomposition_mode == "both":
+            raise ValueError("Select 'keep' or 'remove' for a single output image.")
+    else:
+        dvdt = EndpointLinearDVD()
+        caption = "Endpoint Linear DVD | V = 1 | Adult anchor: auto"
 
     items = [load_tensor_rgb(p, IMG_SIZE).to(device) for p in RGB_PATHS]
     row_labels = [p.name for p in RGB_PATHS]
@@ -161,7 +151,7 @@ def make_demo(outfile: Path) -> None:
 
     for i, x in enumerate(items):
         for j, age in enumerate(AGES):
-            out = dvdt(x.clone(), months=age)
+            out = dvdt(x, months=age)
 
             ax[i, j].imshow(_vis_rgb(out))
             ax[i, j].axis("off")
@@ -172,23 +162,20 @@ def make_demo(outfile: Path) -> None:
             if i == 0:
                 ax[i, j].set_title(f"{age} mo", fontsize=12)
 
-    caption = (
-            f"RGB DVD demo | "
-            f"cs band=[{CFG.cs_sf_min_cpd:g}, {CFG.cs_sf_max_cpd:g}] cpd, "
-            f"FOV={CFG.cs_fov_deg:g}°, "
-            f"{'soft' if CFG.cs_use_soft_mask else 'hard'}(tau={CFG.cs_soft_tau_log10:g}), "
-            f"range={CFG.cs_band_range_mode}, "
-            f"blur={CFG.blur_mode}, "
-            f"b{CFG.apply_blur}_c{CFG.apply_color}_cs{CFG.apply_contrast}, "
-            f"cs_logspan_start={CFG.cs_logspan_start:g}"
-        )
     fig.suptitle(caption, fontsize=10, y=0.995)
 
     fig.tight_layout()
     outfile.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(outfile, dpi=300)
+    plt.close(fig)
     print(f"Saved {outfile.resolve()}")
 
 
 if __name__ == "__main__":
-    make_demo(OUT_PATH)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dvd-method", choices=("endpoint-linear", "legacy"), default="endpoint-linear")
+    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    make_demo(args.output or OUT_DIR / f"rgb_dvd_demo_{args.dvd_method}.pdf",
+              args.dvd_method, args.device)

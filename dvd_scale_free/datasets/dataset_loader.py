@@ -457,19 +457,14 @@ class SupervisedLearningDataset:
         }
 
     def _get_imagenet(self) -> Dict[str, torch.utils.data.Dataset]:
-        """
-        Example: ImageNet. For demonstration, we use torchvision's
-        datasets.FakeData as a placeholder.
-        """
-        image_size = 256 #self.args.get('dataset', {}).get('image_size', 224)
-        imagenet_path= "/share/klab/datasets/imagenet/"
+        """Return supervised ImageFolder train and validation splits."""
+        imagenet_path = getattr(self.args, "imagenet_path", None) or "/share/klab/datasets/imagenet/"
         print(f"[INFO] Loading ImageNet dataset ({imagenet_path}).")
 
         train_transform = self.get_supervised_pipeline_transform(train=True)
         val_test_transform   = self.get_supervised_pipeline_transform(train=False)
 
         from dvd_scale_free.datasets.imagenet.imagenet import load_imagenet
-        imagenet_path= "/share/klab/datasets/imagenet/"
 
         train_dataset, train_sampler, val_dataset = load_imagenet(imagenet_path=imagenet_path,
                                                     batch_size= self.args.batch_size_per_gpu,
@@ -1018,4 +1013,3 @@ if __name__ == "__main__":
         # labels is the ground truth label (or dummy labels if unlabeled)
         view1, view2 = images
         print(view1.shape, view2.shape, labels)
-        

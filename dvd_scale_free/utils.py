@@ -255,6 +255,7 @@ def save_initial_checkpoint(log_dir, args, model, optimizer, scaler, logger, net
             "state_dict": model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "scaler": scaler.state_dict(),
+            "dvd_protocol": getattr(args, "dvd_protocol", None),
         },
         is_best=False,
         filename=init_checkpoint_path,
@@ -338,7 +339,8 @@ def get_loss_function(args):
     if dataset_name == 'imagenet':
         from torchvision.datasets import ImageFolder
 
-        imagenet_path = "/share/klab/datasets/imagenet/train"  # Adjust as needed
+        imagenet_root = getattr(args, "imagenet_path", None) or "/share/klab/datasets/imagenet/"
+        imagenet_path = os.path.join(imagenet_root, "train")
         print(f"Calculating class weights from {imagenet_path} for ImageNet")
         imagenet_train_dataset = ImageFolder(root=imagenet_path)
         class_weights = calculate_class_weights_from_imagefolder(imagenet_train_dataset).cuda(args.gpu)
