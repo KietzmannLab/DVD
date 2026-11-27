@@ -74,6 +74,8 @@ dvd = make_curriculum(speed=0.5, invert_frequency=True, invert_amplitude=True)
 aged = dvd(images, months=48)
 ```
 
+Color development is on by default for forward DVD and off for inverted modes; pass `apply_color=True` or `apply_color=False` to `make_curriculum` to override it.
+
 Random resized crop (`--rrc`) is off by default. [Recipe B's large-ratio RRC augmentation](dvd_scale_free/datasets/augmentations.py#L9) keeps 70 to 100% of the image area.
 
 ## Datasets
